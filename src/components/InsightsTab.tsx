@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Expense } from '../types';
+import type { Expense, Budget } from '../types';
 import { CATEGORIES } from '../constants/categories';
 import {
   ResponsiveContainer,
@@ -11,52 +11,111 @@ import {
   XAxis,
   Tooltip,
 } from 'recharts';
-import { Save, AlertCircle, TrendingUp } from 'lucide-react';
+import { Save, AlertCircle, TrendingUp, Calendar, CalendarRange } from 'lucide-react';
 
 interface InsightsTabProps {
   expenses: Expense[];
-  currentBudget: number;
-  onSaveBudget: (limit: number) => Promise<void>;
+  activeBudget: Budget | null;
+  activeRange: { startDate: string; endDate: string; label: string };
+  onSaveBudget: (data: {
+    type: 'monthly' | 'custom';
+    monthly: number;
+    start_date?: string;
+    end_date?: string;
+  }) => Promise<void>;
 }
+
+// Utility to get local date in YYYY-MM-DD
+const getLocalDateString = (d: Date = new Date()): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export const InsightsTab: React.FC<InsightsTabProps> = ({
   expenses,
-  currentBudget,
+  activeBudget,
+  activeRange,
   onSaveBudget,
 }) => {
-  const [budgetString, setBudgetString] = useState(currentBudget.toString());
+  const [trackingMode, setTrackingMode] = useState<'monthly' | 'custom'>('monthly');
+  const [budgetString, setBudgetString] = useState('');
+  
+  // Custom Date fields
+  const [startDate, setStartDate] = useState(getLocalDateString());
+  const [endDate, setEndDate] = useState(() => {
+    const defaultEnd = new Date();
+    defaultEnd.setDate(defaultEnd.getDate() + 30);
+    return getLocalDateString(defaultEnd);
+  });
+  
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Sync state if budget changes upstream
+  // Sync state if activeBudget changes upstream
   useEffect(() => {
-    setBudgetString(currentBudget.toString());
-  }, [currentBudget]);
+    if (activeBudget) {
+      setTrackingMode(activeBudget.type);
+      setBudgetString(activeBudget.monthly.toString());
+      if (activeBudget.type === 'custom') {
+        if (activeBudget.start_date) setStartDate(activeBudget.start_date);
+        if (activeBudget.end_date) setEndDate(activeBudget.end_date);
+      }
+    } else {
+      setTrackingMode('monthly');
+      setBudgetString('');
+    }
+  }, [activeBudget]);
 
   const handleSaveBudget = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+    setSaveSuccess(false);
+
     const limitNum = parseFloat(budgetString);
-    if (isNaN(limitNum) || limitNum < 0) return;
+    if (isNaN(limitNum) || limitNum < 0) {
+      setValidationError('Please enter a valid budget amount.');
+      return;
+    }
+
+    if (trackingMode === 'custom') {
+      if (!startDate || !endDate) {
+        setValidationError('Start date and End date are required for custom ranges.');
+        return;
+      }
+      if (startDate > endDate) {
+        setValidationError('Start date cannot occur after End date.');
+        return;
+      }
+    }
 
     setSaving(true);
-    setSaveSuccess(false);
     try {
-      await onSaveBudget(limitNum);
+      await onSaveBudget({
+        type: trackingMode,
+        monthly: limitNum,
+        start_date: trackingMode === 'custom' ? startDate : undefined,
+        end_date: trackingMode === 'custom' ? endDate : undefined,
+      });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error(err);
+      setValidationError('Failed to save budget settings.');
     } finally {
       setSaving(false);
     }
   };
 
-  // 1. Calculations: Category Breakdown (Current Month)
-  const currentMonthStr = new Date().toISOString().substring(0, 7); // "YYYY-MM"
-  const currentMonthExpenses = expenses.filter((e) => e.date.startsWith(currentMonthStr));
-  const currentMonthTotal = currentMonthExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  // 1. Calculations: Category Breakdown (Scoped to Active Budget Date Range)
+  const scopedExpenses = expenses.filter(
+    (e) => e.date >= activeRange.startDate && e.date <= activeRange.endDate && e.type !== 'credit'
+  );
+  const scopedTotal = scopedExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
-  const categoryTotals = currentMonthExpenses.reduce((acc, expense) => {
+  const categoryTotals = scopedExpenses.reduce((acc, expense) => {
     const cat = expense.category;
     acc[cat] = (acc[cat] || 0) + Number(expense.amount);
     return acc;
@@ -77,7 +136,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
     })
     .sort((a, b) => b.value - a.value);
 
-  // 2. Calculations: 14-day daily spending trend
+  // 2. Calculations: 14-day daily spending trend (Debits Only)
   const trendData = [];
   const today = new Date();
   
@@ -90,7 +149,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
     const dateStr = `${year}-${month}-${day}`; // local format YYYY-MM-DD
     
     const dayTotal = expenses
-      .filter((e) => e.date === dateStr)
+      .filter((e) => e.date === dateStr && e.type !== 'credit')
       .reduce((sum, e) => sum + Number(e.amount), 0);
 
     const formattedLabel = d.toLocaleDateString('en-IN', {
@@ -126,14 +185,14 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
   const CustomPieTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
-      const percentage = currentMonthTotal > 0 ? (data.value / currentMonthTotal) * 100 : 0;
+      const percentage = scopedTotal > 0 ? (data.value / scopedTotal) * 100 : 0;
       return (
         <div className="bg-ledgerElevated border border-ledgerBorder p-2.5 rounded-lg text-xs shadow-xl font-mono">
           <p className="text-ledgerText mb-0.5">{data.emoji} {data.name}</p>
           <p className="text-ledgerMint font-semibold">
             ₹{data.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </p>
-          <p className="text-ledgerMuted text-[10px]">{percentage.toFixed(1)}% of month total</p>
+          <p className="text-ledgerMuted text-[10px]">{percentage.toFixed(1)}% of budget spend</p>
         </div>
       );
     }
@@ -142,39 +201,123 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
 
   return (
     <div className="space-y-6 pb-24">
-      {/* 1. Monthly Budget Card */}
-      <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg">
-        <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider mb-3">
-          Monthly Limit Setup
-        </h3>
-        <form onSubmit={handleSaveBudget} className="flex gap-3">
-          <div className="relative flex-1">
-            <span className="absolute left-3.5 top-1/2 transform -translate-y-1/2 font-mono text-ledgerMuted text-sm">
-              ₹
-            </span>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              required
-              value={budgetString}
-              onChange={(e) => setBudgetString(e.target.value)}
-              placeholder="0.00"
-              className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-8 pr-4 font-mono text-sm tracking-tight transition"
-            />
-          </div>
+      {/* 1. Budget Card Setup */}
+      <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
+        <div>
+          <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
+            Budget Configuration
+          </h3>
+        </div>
+
+        {/* Segmented Mode Selector */}
+        <div className="flex bg-ledgerElevated border border-ledgerBorder rounded-lg p-0.5">
           <button
-            type="submit"
-            disabled={saving}
-            className="bg-ledgerMint text-[#0F1B1E] font-medium px-4 py-2.5 rounded-lg text-sm hover:bg-ledgerMint/90 active:transform active:scale-[0.98] transition flex items-center justify-center gap-1.5 flex-shrink-0"
+            type="button"
+            onClick={() => {
+              setTrackingMode('monthly');
+              setValidationError(null);
+            }}
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-[6px] transition-all flex items-center justify-center gap-1.5 ${
+              trackingMode === 'monthly'
+                ? 'bg-ledgerSurface text-ledgerMint border border-ledgerBorder/40 shadow-sm font-bold'
+                : 'text-ledgerMuted hover:text-ledgerText'
+            }`}
           >
-            <Save className="w-4 h-4" />
-            {saving ? 'Saving...' : 'Save'}
+            <Calendar className="w-3.5 h-3.5" />
+            Monthly (1 to 1)
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTrackingMode('custom');
+              setValidationError(null);
+            }}
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-[6px] transition-all flex items-center justify-center gap-1.5 ${
+              trackingMode === 'custom'
+                ? 'bg-ledgerSurface text-ledgerMint border border-ledgerBorder/40 shadow-sm font-bold'
+                : 'text-ledgerMuted hover:text-ledgerText'
+            }`}
+          >
+            <CalendarRange className="w-3.5 h-3.5" />
+            Custom Range
+          </button>
+        </div>
+
+        <form onSubmit={handleSaveBudget} className="space-y-3.5">
+          {/* Custom Date Pickers */}
+          {trackingMode === 'custom' && (
+            <div className="grid grid-cols-2 gap-3 animate-fade-in">
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2 px-3 font-mono text-xs transition"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2 px-3 font-mono text-xs transition"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Budget Limit Input */}
+          <div className="space-y-1">
+            {trackingMode === 'custom' && (
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
+                Budget Limit
+              </label>
+            )}
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <span className="absolute left-3.5 top-1/2 transform -translate-y-1/2 font-mono text-ledgerMuted text-sm">
+                  ₹
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  value={budgetString}
+                  onChange={(e) => setBudgetString(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-8 pr-4 font-mono text-sm tracking-tight transition"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-ledgerMint text-[#0F1B1E] font-medium px-4 py-2.5 rounded-lg text-sm hover:bg-ledgerMint/90 active:transform active:scale-[0.98] transition flex items-center justify-center gap-1.5 flex-shrink-0"
+              >
+                <Save className="w-4 h-4" />
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
         </form>
+
+        {validationError && (
+          <p className="text-xs text-ledgerCoral mt-1 flex items-center gap-1.5 animate-fade-in">
+            <AlertCircle className="w-3.5 h-3.5" />
+            {validationError}
+          </p>
+        )}
         {saveSuccess && (
-          <p className="text-xs text-ledgerMint mt-2 flex items-center gap-1.5 animate-fade-in">
-            ✓ Budget limits updated successfully.
+          <p className="text-xs text-ledgerMint mt-1 flex items-center gap-1.5 animate-fade-in">
+            ✓ Budget configured successfully.
           </p>
         )}
       </div>
@@ -193,12 +336,12 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
           {/* 2. Category Breakdown Donut Chart */}
           <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg">
             <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider mb-4">
-              Category Breakdown (This Month)
+              Breakdown ({activeRange.label})
             </h3>
             
             {donutData.length === 0 ? (
               <div className="py-8 text-center text-xs text-ledgerMuted">
-                No expenses logged for {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}.
+                No debit transactions logged for this tracking period.
               </div>
             ) : (
               <div className="space-y-6">
@@ -227,7 +370,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                 {/* Categorized Legend and Percentages */}
                 <div className="space-y-2">
                   {donutData.map((entry) => {
-                    const pct = ((entry.value / currentMonthTotal) * 100).toFixed(0);
+                    const pct = ((entry.value / scopedTotal) * 100).toFixed(0);
                     return (
                       <div key={entry.id} className="flex justify-between items-center p-2 rounded-lg bg-ledgerElevated/30 border border-ledgerBorder/40">
                         <div className="flex items-center gap-2.5 min-w-0">

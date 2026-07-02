@@ -4,7 +4,7 @@ import { X, Calendar, AlignLeft } from 'lucide-react';
 
 interface AddExpenseSheetProps {
   onClose: () => void;
-  onSave: (data: { amount: number; category: string; note: string; date: string }) => Promise<void>;
+  onSave: (data: { amount: number; category: string; note: string; date: string; type: 'debit' | 'credit' }) => Promise<void>;
 }
 
 // Utility to get local date in YYYY-MM-DD
@@ -21,6 +21,7 @@ export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSav
   const [selectedCategory, setSelectedCategory] = useState<string>('food');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(getLocalDateString());
+  const [type, setType] = useState<'debit' | 'credit'>('debit');
   const [submitting, setSubmitting] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,6 +53,7 @@ export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSav
         category: selectedCategory,
         note: note.trim(),
         date,
+        type,
       });
       onClose();
     } catch (err) {
@@ -79,7 +81,7 @@ export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSav
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-ledgerText uppercase tracking-wider">
-            New Expense
+            {type === 'credit' ? 'New Credit' : 'New Expense'}
           </h2>
           <button
             type="button"
@@ -90,9 +92,35 @@ export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSav
           </button>
         </div>
 
+        {/* Toggle Control for Debit vs Credit */}
+        <div className="flex bg-ledgerElevated border border-ledgerBorder rounded-lg p-0.5">
+          <button
+            type="button"
+            onClick={() => setType('debit')}
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-[6px] transition-all duration-200 ${
+              type === 'debit'
+                ? 'bg-ledgerSurface text-[#E8615A] border border-ledgerBorder/40 shadow-sm font-bold'
+                : 'text-ledgerMuted hover:text-ledgerText'
+            }`}
+          >
+            Debit (Expense)
+          </button>
+          <button
+            type="button"
+            onClick={() => setType('credit')}
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-[6px] transition-all duration-200 ${
+              type === 'credit'
+                ? 'bg-ledgerSurface text-[#7FE7C4] border border-ledgerBorder/40 shadow-sm font-bold'
+                : 'text-ledgerMuted hover:text-ledgerText'
+            }`}
+          >
+            Credit (Income)
+          </button>
+        </div>
+
         {/* Large Amount Input */}
         <div className="relative flex items-center justify-center py-2">
-          <span className="absolute left-4 font-mono text-3xl text-ledgerMuted">₹</span>
+          <span className={`absolute left-4 font-mono text-3xl transition-colors ${type === 'credit' ? 'text-ledgerMint' : 'text-ledgerMuted'}`}>₹</span>
           <input
             ref={amountInputRef}
             type="text"
@@ -101,7 +129,9 @@ export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSav
             required
             value={amount}
             onChange={handleAmountChange}
-            className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-xl py-4 pl-12 pr-4 text-center font-mono text-3xl font-semibold tracking-tight tabular-nums transition"
+            className={`w-full bg-ledgerElevated border border-ledgerBorder rounded-xl py-4 pl-12 pr-4 text-center font-mono text-3xl font-semibold tracking-tight tabular-nums transition ${
+              type === 'credit' ? 'text-ledgerMint border-ledgerMint/30 focus:border-ledgerMint' : 'text-ledgerText'
+            }`}
           />
         </div>
 
@@ -180,7 +210,7 @@ export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSav
             disabled={isSaveDisabled}
             className="flex-1 bg-ledgerMint text-[#0F1B1E] font-medium py-2.5 rounded-lg text-sm hover:bg-ledgerMint/90 active:transform active:scale-[0.98] transition disabled:opacity-40 disabled:hover:bg-ledgerMint disabled:cursor-not-allowed"
           >
-            {submitting ? 'Saving...' : 'Save Expense'}
+            {submitting ? 'Saving...' : type === 'credit' ? 'Save Credit' : 'Save Expense'}
           </button>
         </div>
       </form>
