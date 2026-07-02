@@ -6,16 +6,20 @@ import { BudgetBar } from './components/BudgetBar';
 import { TransactionsTab } from './components/TransactionsTab';
 import { InsightsTab } from './components/InsightsTab';
 import { AddExpenseSheet } from './components/AddExpenseSheet';
+import Dock from './components/Dock';
 import {
   Plus,
   LogOut,
-  TrendingUp,
-  ListFilter,
   CheckCircle,
   WifiOff,
   Undo2,
   CalendarDays,
   Sparkles,
+  CreditCard,
+  PiggyBank,
+  History,
+  Settings,
+  Trash2,
 } from 'lucide-react';
 
 // Relative date generator helper for offline seeding
@@ -157,7 +161,7 @@ function App() {
   const [showCarryOverPrompt, setShowCarryOverPrompt] = useState(false);
   const [previousMonthBudget, setPreviousMonthBudget] = useState<number | null>(null);
   
-  const [activeTab, setActiveTab] = useState<'transactions' | 'insights'>('transactions');
+  const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'settings'>('expenses');
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -424,6 +428,26 @@ function App() {
     return { spent, credited };
   }, [expenses, activeRange]);
 
+  const savingsTransactions = useMemo(() => {
+    return expenses.filter((e) => e.type === 'credit');
+  }, [expenses]);
+
+  const totalIncome = useMemo(() => {
+    return savingsTransactions
+      .filter((e) => e.date >= activeRange.startDate && e.date <= activeRange.endDate)
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+  }, [savingsTransactions, activeRange]);
+
+  const netSavings = useMemo(() => {
+    return totalIncome - currentRangeTotals.spent;
+  }, [totalIncome, currentRangeTotals.spent]);
+
+  const savingsRate = useMemo(() => {
+    if (totalIncome <= 0) return 0;
+    const rate = (netSavings / totalIncome) * 100;
+    return Math.max(0, Math.round(rate));
+  }, [netSavings, totalIncome]);
+
   // Toast System trigger helper
   const showToast = (message: string, actionLabel?: string, onAction?: () => void) => {
     if (toastTimeoutRef.current) {
@@ -663,6 +687,8 @@ function App() {
   const currentBalance = budget - currentRangeTotals.spent + currentRangeTotals.credited;
   const isBalanceNegative = currentBalance < 0;
 
+
+
   return (
     <div className="min-h-screen bg-ledgerBg text-ledgerText flex justify-center selection:bg-ledgerMint/25 selection:text-ledgerMint">
       {/* Shell Container: Center max-width 480px */}
@@ -689,13 +715,15 @@ function App() {
             </div>
             
             {/* Sign Out Button */}
-            <button
-              onClick={handleSignOut}
-              className="text-ledgerMuted hover:text-ledgerCoral opacity-40 hover:opacity-100 transition-all p-1.5 rounded-lg hover:bg-ledgerCoral/5"
-              title="Sign Out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            {activeTab !== 'settings' && (
+              <button
+                onClick={handleSignOut}
+                className="text-ledgerMuted hover:text-ledgerCoral opacity-40 hover:opacity-100 transition-all p-1.5 rounded-lg hover:bg-ledgerCoral/5"
+                title="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Budget Progress Bar */}
@@ -704,7 +732,7 @@ function App() {
             credited={currentRangeTotals.credited}
             budget={budget}
             rangeLabel={activeRange.label}
-            onSetBudgetClick={() => setActiveTab('insights')}
+            onSetBudgetClick={() => setActiveTab('settings')}
           />
         </header>
 
@@ -734,7 +762,7 @@ function App() {
               <button
                 onClick={() => {
                   setShowCarryOverPrompt(false);
-                  setActiveTab('insights');
+                  setActiveTab('settings');
                 }}
                 className="flex-1 bg-ledgerElevated border border-ledgerBorder text-ledgerMuted font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition hover:text-ledgerText"
               >
@@ -744,53 +772,152 @@ function App() {
           </div>
         )}
 
-        {/* Segmented Tab Controls */}
-        <div className="px-5 pt-4 pb-2">
-          <div className="flex bg-ledgerSurface border border-ledgerBorder rounded-lg p-0.5">
-            <button
-              onClick={() => setActiveTab('transactions')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-[6px] transition-all duration-200 ${
-                activeTab === 'transactions'
-                  ? 'bg-ledgerElevated text-ledgerMint shadow'
-                  : 'text-ledgerMuted hover:text-ledgerText'
-              }`}
-            >
-              <ListFilter className="w-3.5 h-3.5" />
-              Transactions
-            </button>
-            <button
-              onClick={() => setActiveTab('insights')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-semibold rounded-[6px] transition-all duration-200 ${
-                activeTab === 'insights'
-                  ? 'bg-ledgerElevated text-ledgerMint shadow'
-                  : 'text-ledgerMuted hover:text-ledgerText'
-              }`}
-            >
-              <TrendingUp className="w-3.5 h-3.5" />
-              Insights
-            </button>
-          </div>
-        </div>
-
         {/* Tab view screens */}
-        <main className="flex-1 px-5 pt-3">
-          {activeTab === 'transactions' ? (
-            <TransactionsTab
-              expenses={expenses}
-              onDeleteExpense={handleDeleteExpense}
-            />
-          ) : (
+        <main className="flex-1 px-5 pt-4">
+          {activeTab === 'expenses' && (
             <InsightsTab
               expenses={expenses}
               activeBudget={activeBudget}
               activeRange={activeRange}
               onSaveBudget={handleSaveBudget}
+              hideBudgetConfig={true}
+              hideCharts={false}
             />
+          )}
+
+          {activeTab === 'savings' && (
+            <div className="space-y-6 pb-28 animate-fade-in">
+              {/* Savings Metrics Grid */}
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-4 flex flex-col justify-between shadow-md">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
+                    Total Income
+                  </span>
+                  <div className="mt-2">
+                    <span className="text-xl font-mono font-bold text-ledgerMint tabular-nums">
+                      ₹{totalIncome.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                    <p className="text-[9px] text-ledgerMuted mt-1">This active period</p>
+                  </div>
+                </div>
+
+                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-4 flex flex-col justify-between shadow-md">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
+                    Savings Rate
+                  </span>
+                  <div className="mt-2">
+                    <span className={`text-xl font-mono font-bold tabular-nums ${savingsRate >= 20 ? 'text-ledgerMint' : savingsRate > 0 ? 'text-amber-400' : 'text-ledgerMuted'}`}>
+                      {savingsRate}%
+                    </span>
+                    <p className="text-[9px] text-ledgerMuted mt-1">Net saved / Earned</p>
+                  </div>
+                </div>
+
+                <div className="col-span-2 bg-ledgerSurface border border-ledgerBorder rounded-xl p-4 flex justify-between items-center shadow-md">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
+                      Net Period Savings
+                    </span>
+                    <p className={`text-2xl font-mono font-bold tabular-nums mt-1 ${netSavings >= 0 ? 'text-ledgerMint' : 'text-ledgerCoral'}`}>
+                      ₹{netSavings.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-full ${netSavings >= 0 ? 'bg-ledgerMint/5 text-ledgerMint border border-ledgerMint/10' : 'bg-ledgerCoral/5 text-ledgerCoral border border-ledgerCoral/10'}`}>
+                    <PiggyBank className="w-6 h-6" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Income Credits History */}
+              <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
+                <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
+                  Income Credits Log
+                </h3>
+
+                {savingsTransactions.length === 0 ? (
+                  <p className="text-xs text-ledgerMuted text-center py-6">
+                    No income transactions logged yet. Use "+ Add Transaction" to log income.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-ledgerBorder/40 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
+                    {savingsTransactions.map((tx) => (
+                      <div key={tx.id} className="flex justify-between items-center py-3 first:pt-0 last:pb-0 group">
+                        <div className="min-w-0 pr-2">
+                          <p className="text-xs font-medium text-ledgerText truncate">
+                            {tx.note || 'Income Credit'}
+                          </p>
+                          <span className="text-[9px] text-ledgerMuted font-mono">
+                            {formatDateShort(tx.date)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="font-mono text-xs text-ledgerMint font-semibold tabular-nums">
+                            +₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                          <button
+                            onClick={() => handleDeleteExpense(tx.id)}
+                            className="text-ledgerMuted hover:text-ledgerCoral p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'logs' && (
+            <div className="pb-28">
+              <TransactionsTab
+                expenses={expenses}
+                onDeleteExpense={handleDeleteExpense}
+              />
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="space-y-6 pb-28 animate-fade-in">
+              <InsightsTab
+                expenses={expenses}
+                activeBudget={activeBudget}
+                activeRange={activeRange}
+                onSaveBudget={handleSaveBudget}
+                hideBudgetConfig={false}
+                hideCharts={true}
+              />
+              
+              {/* Additional Account/Settings options */}
+              <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
+                <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
+                  Session & Account
+                </h3>
+                <div className="flex justify-between items-center text-xs">
+                  <div className="min-w-0">
+                    <p className="font-medium text-ledgerText truncate">
+                      {session?.user?.email || 'Offline Sandbox User'}
+                    </p>
+                    <span className="text-[10px] text-ledgerMuted">
+                      Role: Subscriber
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleSignOut}
+                    className="bg-ledgerCoral/10 hover:bg-ledgerCoral/20 border border-ledgerCoral/20 text-ledgerCoral font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </main>
 
-        {/* Floating "+ Add expense" Button */}
-        <div className="fixed bottom-6 left-0 right-0 pointer-events-none flex justify-center z-40">
+        {/* Floating "+ Add Transaction" Button above the Dock */}
+        <div className="fixed bottom-24 left-0 right-0 pointer-events-none flex justify-center z-40">
           <div className="w-full max-w-[480px] px-6 flex justify-end pointer-events-auto">
             <button
               onClick={() => setIsAddSheetOpen(true)}
@@ -802,9 +929,46 @@ function App() {
           </div>
         </div>
 
+        {/* Sticky Dock Navigation Bar */}
+        <div className="fixed bottom-4 left-0 right-0 pointer-events-none flex justify-center z-40">
+          <div className="w-full max-w-[480px] px-6 pointer-events-auto flex justify-center">
+            <Dock
+              items={[
+                {
+                  icon: <CreditCard className="w-4 h-4 text-ledgerMint" />,
+                  label: 'Expenses',
+                  onClick: () => setActiveTab('expenses'),
+                  className: activeTab === 'expenses' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                },
+                {
+                  icon: <PiggyBank className="w-4 h-4 text-ledgerMint" />,
+                  label: 'Savings',
+                  onClick: () => setActiveTab('savings'),
+                  className: activeTab === 'savings' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                },
+                {
+                  icon: <History className="w-4 h-4 text-ledgerMint" />,
+                  label: 'Logs',
+                  onClick: () => setActiveTab('logs'),
+                  className: activeTab === 'logs' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                },
+                {
+                  icon: <Settings className="w-4 h-4 text-ledgerMint" />,
+                  label: 'Settings',
+                  onClick: () => setActiveTab('settings'),
+                  className: activeTab === 'settings' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                }
+              ]}
+              panelHeight={60}
+              baseItemSize={46}
+              magnification={58}
+            />
+          </div>
+        </div>
+
         {/* Undo / Info Notification Toast */}
         {toast && (
-          <div className="fixed bottom-20 left-0 right-0 pointer-events-none flex justify-center z-40 px-6">
+          <div className="fixed bottom-36 left-0 right-0 pointer-events-none flex justify-center z-40 px-6">
             <div className="w-full max-w-[360px] bg-ledgerElevated border border-ledgerBorder text-ledgerText px-4 py-3 rounded-xl shadow-2xl flex items-center justify-between pointer-events-auto animate-slide-up gap-4">
               <span className="text-xs font-medium flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-ledgerMint" />
