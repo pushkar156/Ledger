@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Expense, Budget } from '../types';
 import { CATEGORIES } from '../constants/categories';
 import {
@@ -54,20 +54,41 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Keep track of the last synced budget identifier to prevent resetting inputs during active edits
+  const lastSyncedBudgetRef = useRef<string | null>(null);
+
   // Sync state if activeBudget changes upstream
   useEffect(() => {
-    if (activeBudget) {
-      setTrackingMode(activeBudget.type);
-      setBudgetString(activeBudget.monthly.toString());
-      if (activeBudget.type === 'custom') {
-        if (activeBudget.start_date) setStartDate(activeBudget.start_date);
-        if (activeBudget.end_date) setEndDate(activeBudget.end_date);
+    const budgetIdentifier = activeBudget
+      ? `${activeBudget.id || ''}-${activeBudget.type}-${activeBudget.monthly}-${activeBudget.start_date || ''}-${activeBudget.end_date || ''}`
+      : 'none';
+
+    if (lastSyncedBudgetRef.current !== budgetIdentifier) {
+      if (activeBudget) {
+        setTrackingMode(activeBudget.type);
+        setBudgetString(activeBudget.monthly.toString());
+        if (activeBudget.type === 'custom') {
+          if (activeBudget.start_date) setStartDate(activeBudget.start_date);
+          if (activeBudget.end_date) setEndDate(activeBudget.end_date);
+        }
+      } else {
+        setTrackingMode('monthly');
+        setBudgetString('');
       }
-    } else {
-      setTrackingMode('monthly');
-      setBudgetString('');
+      lastSyncedBudgetRef.current = budgetIdentifier;
     }
   }, [activeBudget]);
+
+  const handleStartDateChange = (val: string) => {
+    const todayStr = getLocalDateString();
+    if (val > todayStr) {
+      setValidationError('Start date cannot be in the future.');
+      setStartDate(todayStr);
+    } else {
+      setValidationError(null);
+      setStartDate(val);
+    }
+  };
 
   const handleSaveBudget = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,6 +104,12 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
     if (trackingMode === 'custom') {
       if (!startDate || !endDate) {
         setValidationError('Start date and End date are required for custom ranges.');
+        return;
+      }
+      const todayStr = getLocalDateString();
+      if (startDate > todayStr) {
+        setValidationError('Start date cannot be in the future.');
+        setStartDate(todayStr);
         return;
       }
       if (startDate > endDate) {
@@ -255,7 +282,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                   type="date"
                   required
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                   className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2 px-3 font-mono text-xs transition"
                 />
               </div>

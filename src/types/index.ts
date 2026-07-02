@@ -18,4 +18,5 @@ export interface Budget {
   end_date?: string; // YYYY-MM-DD format
   monthly: number;
   category_limits: Record<string, number>;
+  created_at?: string;
 }

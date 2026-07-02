@@ -192,6 +192,7 @@ function App() {
             month: prevMonthStr,
             monthly: 25000,
             category_limits: {},
+            created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
           }
         ];
         localStorage.setItem('ledger_budgets_history', JSON.stringify(historySeed));
@@ -355,36 +356,12 @@ function App() {
   // Compute active budget configuration and active date range
   const activeBudgetAndRange = useMemo(() => {
     const todayStr = getLocalDateString();
-    const currentMonthStr = todayStr.substring(0, 7); // "YYYY-MM"
     
-    // 1. Look for custom budgets covering today
-    const activeCustom = allBudgets.find(
-      (b) => b.type === 'custom' && b.start_date && b.end_date && todayStr >= b.start_date && todayStr <= b.end_date
-    );
-    
-    if (activeCustom) {
+    if (allBudgets.length === 0) {
+      const monthRange = getMonthRange(todayStr.substring(0, 7));
       return {
-        budgetConfig: activeCustom,
-        limit: Number(activeCustom.monthly),
-        range: {
-          startDate: activeCustom.start_date!,
-          endDate: activeCustom.end_date!,
-          label: `${formatDateShort(activeCustom.start_date!)} - ${formatDateShort(activeCustom.end_date!)}`,
-          isCustom: true,
-        }
-      };
-    }
-    
-    // 2. Otherwise look for monthly budget for current month
-    const activeMonthly = allBudgets.find(
-      (b) => b.type === 'monthly' && b.month === currentMonthStr
-    );
-    
-    const monthRange = getMonthRange(currentMonthStr);
-    if (activeMonthly) {
-      return {
-        budgetConfig: activeMonthly,
-        limit: Number(activeMonthly.monthly),
+        budgetConfig: null,
+        limit: 0,
         range: {
           startDate: monthRange.startDate,
           endDate: monthRange.endDate,
@@ -393,15 +370,38 @@ function App() {
         }
       };
     }
-    
-    // 3. Fallback: Monthly range with 0 limit
+
+    // Sort budgets by created_at descending (latest first) to pick the active preference
+    const sortedBudgets = [...allBudgets].sort((a, b) => {
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    const latestBudget = sortedBudgets[0];
+
+    if (latestBudget.type === 'custom') {
+      return {
+        budgetConfig: latestBudget,
+        limit: Number(latestBudget.monthly),
+        range: {
+          startDate: latestBudget.start_date!,
+          endDate: latestBudget.end_date!,
+          label: `${formatDateShort(latestBudget.start_date!)} - ${formatDateShort(latestBudget.end_date!)}`,
+          isCustom: true,
+        }
+      };
+    }
+
+    const budgetMonth = latestBudget.month || todayStr.substring(0, 7);
+    const monthRange = getMonthRange(budgetMonth);
     return {
-      budgetConfig: null,
-      limit: 0,
+      budgetConfig: latestBudget,
+      limit: Number(latestBudget.monthly),
       range: {
         startDate: monthRange.startDate,
         endDate: monthRange.endDate,
-        label: new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+        label: new Date(budgetMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
         isCustom: false,
       }
     };
@@ -578,6 +578,7 @@ function App() {
         const newLocalBudget: Budget = {
           ...newBudget,
           id: `local-budget-${Date.now()}`,
+          created_at: new Date().toISOString(),
         } as Budget;
 
         budgetsList.push(newLocalBudget);
