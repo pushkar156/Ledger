@@ -58,6 +58,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({ expenses, onDeleteExpe
             selected={selectedDate}
             onSelect={setSelectedDate}
             className="text-ledgerText"
+            expenses={expenses}
           />
         </div>
       </div>

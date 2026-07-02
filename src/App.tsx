@@ -252,6 +252,87 @@ function App() {
     }
   }, [isOfflineMode]);
 
+  // Clean up duplicate or overlapping budget configurations that have 0 transactions
+  const cleanupDuplicateBudgets = useCallback(async (budgetsList: Budget[], expensesList: Expense[]) => {
+    const budgetsToDelete: string[] = [];
+    const keepBudgets: Budget[] = [];
+
+    const getDates = (b: Budget) => {
+      let start = '';
+      let end = '';
+      if (b.type === 'custom') {
+        start = b.start_date || '';
+        end = b.end_date || '';
+      } else {
+        const monthStr = b.month || new Date().toISOString().substring(0, 7);
+        const range = getMonthRange(monthStr);
+        start = range.startDate;
+        end = range.endDate;
+      }
+      return { start, end };
+    };
+
+    // Sort budgets by created_at descending (latest first)
+    const sorted = [...budgetsList].sort((a, b) => {
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    for (const b of sorted) {
+      const { start: bStart, end: bEnd } = getDates(b);
+      if (!bStart || !bEnd) continue;
+
+      // Check if this budget overlaps with any budget we have already decided to keep
+      const overlappingKeep = keepBudgets.find((k) => {
+        const { start: kStart, end: kEnd } = getDates(k);
+        return (bStart <= kEnd) && (bEnd >= kStart);
+      });
+
+      if (overlappingKeep) {
+        // Overlap detected!
+        // Count transactions inside both ranges
+        const bTxCount = expensesList.filter((e) => e.date >= bStart && e.date <= bEnd).length;
+        const { start: kStart, end: kEnd } = getDates(overlappingKeep);
+        const kTxCount = expensesList.filter((e) => e.date >= kStart && e.date <= kEnd).length;
+
+        if (bTxCount > 0 && kTxCount === 0) {
+          // b has transactions but k has none! Swap them: keep b, delete k
+          if (overlappingKeep.id) {
+            budgetsToDelete.push(overlappingKeep.id);
+          }
+          const idx = keepBudgets.indexOf(overlappingKeep);
+          if (idx > -1) keepBudgets.splice(idx, 1);
+          keepBudgets.push(b);
+        } else {
+          // k has transactions or both have none. Delete b (older)
+          if (b.id) {
+            budgetsToDelete.push(b.id);
+          }
+        }
+      } else {
+        keepBudgets.push(b);
+      }
+    }
+
+    if (budgetsToDelete.length > 0) {
+      console.log('Purging duplicate/overlapping empty budgets:', budgetsToDelete);
+      try {
+        if (isOfflineMode) {
+          const current = budgetsList.filter((b) => !b.id || !budgetsToDelete.includes(b.id));
+          localStorage.setItem('ledger_budgets_history', JSON.stringify(current));
+          setAllBudgets(current);
+        } else {
+          await supabase.from('budgets').delete().in('id', budgetsToDelete);
+          const current = budgetsList.filter((b) => !b.id || !budgetsToDelete.includes(b.id));
+          setAllBudgets(current);
+        }
+      } catch (err) {
+        console.error('Failed to purge duplicate budgets:', err);
+      }
+    }
+  }, [isOfflineMode]);
+
   // Fetch Data (Expenses, Budgets, and Savings)
   const fetchData = useCallback(async () => {
     if (!session?.user) return;
@@ -274,6 +355,9 @@ function App() {
 
         const parsedSavings: SavingsTransaction[] = localSav ? JSON.parse(localSav) : [];
         setSavings(parsedSavings);
+
+        // Run cleanup
+        cleanupDuplicateBudgets(budgetsList, parsedExpenses);
 
         // Compute carry over triggers
         const todayStr = getLocalDateString();
@@ -314,7 +398,8 @@ function App() {
         ]);
 
         if (expensesRes.error) throw expensesRes.error;
-        setExpenses(expensesRes.data || []);
+        const parsedExpenses = expensesRes.data || [];
+        setExpenses(parsedExpenses);
 
         if (budgetsRes.error) throw budgetsRes.error;
         const budgetsList: Budget[] = budgetsRes.data || [];
@@ -322,6 +407,9 @@ function App() {
 
         if (savingsRes.error) throw savingsRes.error;
         setSavings(savingsRes.data || []);
+
+        // Run cleanup
+        cleanupDuplicateBudgets(budgetsList, parsedExpenses);
 
         // Compute carry over triggers
         const todayStr = getLocalDateString();
@@ -349,7 +437,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [session, isOfflineMode]);
+  }, [session, isOfflineMode, cleanupDuplicateBudgets]);
 
   // Trigger initial fetch when session is established
   useEffect(() => {
@@ -597,6 +685,7 @@ function App() {
   };
 
   // Save Budget Configuration (Supporting monthly & custom types)
+  // Save Budget Configuration (Supporting monthly & custom types)
   const handleSaveBudget = async (data: {
     type: 'monthly' | 'custom';
     monthly: number;
@@ -605,6 +694,79 @@ function App() {
   }) => {
     if (!session?.user) return;
     const currentMonthStr = new Date().toISOString().substring(0, 7); // "YYYY-MM"
+
+    // Helper to get dates of a budget
+    const getDates = (b: Budget) => {
+      let start = '';
+      let end = '';
+      if (b.type === 'custom') {
+        start = b.start_date || '';
+        end = b.end_date || '';
+      } else {
+        const monthStr = b.month || new Date().toISOString().substring(0, 7);
+        const range = getMonthRange(monthStr);
+        start = range.startDate;
+        end = range.endDate;
+      }
+      return { start, end };
+    };
+
+    // Calculate dates of the budget being saved
+    let newStart = '';
+    let newEnd = '';
+    if (data.type === 'custom') {
+      newStart = data.start_date!;
+      newEnd = data.end_date!;
+    } else {
+      const monthRange = getMonthRange(currentMonthStr);
+      newStart = monthRange.startDate;
+      newEnd = monthRange.endDate;
+    }
+
+    // Find any existing budgets that overlap with the new range
+    const overlapping = allBudgets.filter((b) => {
+      // Don't check against the budget we are currently editing
+      if (activeBudget && b.id === activeBudget.id) return false;
+      
+      const { start, end } = getDates(b);
+      return (newStart <= end) && (newEnd >= start);
+    });
+
+    const budgetsToDelete: string[] = [];
+    let hasProtectedOverlap = false;
+
+    for (const b of overlapping) {
+      const { start, end } = getDates(b);
+      const txCount = expenses.filter((e) => e.date >= start && e.date <= end).length;
+      if (txCount > 0) {
+        // Has transactions! We can't delete it.
+        hasProtectedOverlap = true;
+      } else {
+        // No transactions! We can delete it.
+        if (b.id) budgetsToDelete.push(b.id);
+      }
+    }
+
+    if (hasProtectedOverlap) {
+      const errMsg = 'Overlaps with an active period containing transactions.';
+      showToast(errMsg);
+      throw new Error(errMsg);
+    }
+
+    // If there are empty overlapping budgets, delete them first
+    if (budgetsToDelete.length > 0) {
+      try {
+        if (isOfflineMode) {
+          const remaining = allBudgets.filter((b) => !b.id || !budgetsToDelete.includes(b.id));
+          localStorage.setItem('ledger_budgets_history', JSON.stringify(remaining));
+          setAllBudgets(remaining);
+        } else {
+          await supabase.from('budgets').delete().in('id', budgetsToDelete);
+        }
+      } catch (err) {
+        console.error('Failed to pre-delete empty overlapping budgets:', err);
+      }
+    }
 
     const newBudget: Partial<Budget> = {
       user_id: session.user.id,
@@ -632,6 +794,11 @@ function App() {
           budgetsList = budgetsList.filter(
             (b) => !(b.type === 'monthly' && b.month === currentMonthStr)
           );
+        }
+
+        // Also remove any pre-deleted budgets from local list
+        if (budgetsToDelete.length > 0) {
+          budgetsList = budgetsList.filter((b) => !b.id || !budgetsToDelete.includes(b.id));
         }
 
         const newLocalBudget: Budget = {
