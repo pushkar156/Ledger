@@ -12,13 +12,16 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
     "autoprefixer": "^10.5.2",
+    "clsx": "^2.1.1",
     "lucide-react": "^1.23.0",
     "motion": "^12.42.2",
     "postcss": "^8.5.16",
     "react": "^19.2.7",
+    "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.7",
     "react-is": "^19.2.7",
     "recharts": "^3.9.1",
+    "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.2"
   },
   "devDependencies": {

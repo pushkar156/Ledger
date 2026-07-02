@@ -20,3 +20,13 @@ export interface Budget {
   category_limits: Record<string, number>;
   created_at?: string;
 }
+
+export interface SavingsTransaction {
+  id: string;
+  user_id: string;
+  amount: number;
+  type: 'incoming' | 'outgoing';
+  note: string | null;
+  date: string; // YYYY-MM-DD format
+  created_at: string;
+}

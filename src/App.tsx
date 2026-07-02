@@ -1,15 +1,19 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase, hasSupabaseCreds } from './lib/supabase';
-import type { Expense, Budget } from './types';
+import type { Expense, Budget, SavingsTransaction } from './types';
 import { Auth } from './components/Auth';
 import { BudgetBar } from './components/BudgetBar';
 import { TransactionsTab } from './components/TransactionsTab';
 import { InsightsTab } from './components/InsightsTab';
 import { AddExpenseSheet } from './components/AddExpenseSheet';
+import { ConfigureBudgetSheet } from './components/ConfigureBudgetSheet';
+import { SavingsTab } from './components/SavingsTab';
+import { PeriodLogsTab } from './components/PeriodLogsTab';
+import { CalendarTab } from './components/CalendarTab';
+import { ProfileSettings } from './components/ProfileSettings';
 import Dock from './components/Dock';
 import {
   Plus,
-  LogOut,
   CheckCircle,
   WifiOff,
   Undo2,
@@ -19,7 +23,9 @@ import {
   PiggyBank,
   History,
   Settings,
-  Trash2,
+  Calendar as CalendarIcon,
+  SlidersHorizontal,
+  PieChart,
 } from 'lucide-react';
 
 // Relative date generator helper for offline seeding
@@ -104,15 +110,36 @@ const MOCK_EXPENSES_SEED = () => [
     created_at: new Date().toISOString(),
     type: 'debit',
   },
+];
+
+// Seed mock savings for offline mode
+const MOCK_SAVINGS_SEED = () => [
   {
-    id: 'mock-8',
+    id: 'mock-sav-1',
     user_id: 'mock-user-123',
-    amount: 150.00,
-    category: 'other',
-    note: 'Notebook & pens',
+    amount: 10000.00,
+    type: 'incoming',
+    note: 'Initial Emergency Fund allocation 🧯',
     date: getRelativeDateStr(10),
-    created_at: new Date().toISOString(),
-    type: 'debit',
+    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'mock-sav-2',
+    user_id: 'mock-user-123',
+    amount: 2500.00,
+    type: 'incoming',
+    note: 'Monthly Gold deposit 🪙',
+    date: getRelativeDateStr(4),
+    created_at: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 'mock-sav-3',
+    user_id: 'mock-user-123',
+    amount: 1500.00,
+    type: 'outgoing',
+    note: 'Withdrawn for minor repairs',
+    date: getRelativeDateStr(1),
+    created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
   },
 ];
 
@@ -156,13 +183,17 @@ function App() {
   
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
+  const [savings, setSavings] = useState<SavingsTransaction[]>([]);
   
   // New Month Carry Over Banner states
   const [showCarryOverPrompt, setShowCarryOverPrompt] = useState(false);
   const [previousMonthBudget, setPreviousMonthBudget] = useState<number | null>(null);
   
-  const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'settings'>('expenses');
+  // Tab states
+  const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'calendar' | 'settings'>('expenses');
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const [isBudgetEditorOpen, setIsBudgetEditorOpen] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Undo Toast State
@@ -176,16 +207,14 @@ function App() {
   // Initialize Auth & Offline Storage Seeding
   useEffect(() => {
     if (isOfflineMode) {
-      // Mock session setup for offline use
       setSession({ user: { id: 'mock-user-123', email: 'ledger.offline@local' } });
       setAuthChecked(true);
 
-      // Seed mock details if first load
-      const seeded = localStorage.getItem('ledger_seeded');
+      const seeded = localStorage.getItem('ledger_seeded_v2');
       if (!seeded) {
         localStorage.setItem('ledger_expenses', JSON.stringify(MOCK_EXPENSES_SEED()));
+        localStorage.setItem('ledger_savings', JSON.stringify(MOCK_SAVINGS_SEED()));
         
-        // Seed default budget history in new layout format
         const currentMonthStr = new Date().toISOString().substring(0, 7);
         const prevMonthStr = getPreviousMonthStr(currentMonthStr);
         
@@ -200,11 +229,10 @@ function App() {
           }
         ];
         localStorage.setItem('ledger_budgets_history', JSON.stringify(historySeed));
-        localStorage.setItem('ledger_seeded', 'true');
+        localStorage.setItem('ledger_seeded_v2', 'true');
       }
       setLoading(false);
     } else {
-      // Supabase Authentication Setup
       supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
         setAuthChecked(true);
@@ -224,7 +252,7 @@ function App() {
     }
   }, [isOfflineMode]);
 
-  // Fetch Data (Expenses & Budgets)
+  // Fetch Data (Expenses, Budgets, and Savings)
   const fetchData = useCallback(async () => {
     if (!session?.user) return;
     setLoading(true);
@@ -234,15 +262,18 @@ function App() {
 
     try {
       if (isOfflineMode) {
-        // Offline Load
         const localEx = localStorage.getItem('ledger_expenses');
         const localBgHistory = localStorage.getItem('ledger_budgets_history');
+        const localSav = localStorage.getItem('ledger_savings');
         
         const parsedExpenses: Expense[] = localEx ? JSON.parse(localEx) : [];
         setExpenses(parsedExpenses);
 
         const budgetsList: Budget[] = localBgHistory ? JSON.parse(localBgHistory) : [];
         setAllBudgets(budgetsList);
+
+        const parsedSavings: SavingsTransaction[] = localSav ? JSON.parse(localSav) : [];
+        setSavings(parsedSavings);
 
         // Compute carry over triggers
         const todayStr = getLocalDateString();
@@ -265,8 +296,7 @@ function App() {
           setShowCarryOverPrompt(false);
         }
       } else {
-        // Online Load
-        const [expensesRes, budgetsRes] = await Promise.all([
+        const [expensesRes, budgetsRes, savingsRes] = await Promise.all([
           supabase
             .from('expenses')
             .select('*')
@@ -276,6 +306,11 @@ function App() {
             .from('budgets')
             .select('*')
             .eq('user_id', session.user.id),
+          supabase
+            .from('savings')
+            .select('*')
+            .order('date', { ascending: false })
+            .order('created_at', { ascending: false }),
         ]);
 
         if (expensesRes.error) throw expensesRes.error;
@@ -284,6 +319,9 @@ function App() {
         if (budgetsRes.error) throw budgetsRes.error;
         const budgetsList: Budget[] = budgetsRes.data || [];
         setAllBudgets(budgetsList);
+
+        if (savingsRes.error) throw savingsRes.error;
+        setSavings(savingsRes.data || []);
 
         // Compute carry over triggers
         const todayStr = getLocalDateString();
@@ -344,6 +382,18 @@ function App() {
           event: '*',
           schema: 'public',
           table: 'budgets',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => {
+          fetchData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'savings',
           filter: `user_id=eq.${session.user.id}`,
         },
         () => {
@@ -428,28 +478,15 @@ function App() {
     return { spent, credited };
   }, [expenses, activeRange]);
 
-  const savingsTransactions = useMemo(() => {
-    return expenses.filter((e) => e.type === 'credit');
-  }, [expenses]);
-
-  const totalIncome = useMemo(() => {
-    return savingsTransactions
-      .filter((e) => e.date >= activeRange.startDate && e.date <= activeRange.endDate)
-      .reduce((sum, e) => sum + Number(e.amount), 0);
-  }, [savingsTransactions, activeRange]);
-
-  const netSavings = useMemo(() => {
-    return totalIncome - currentRangeTotals.spent;
-  }, [totalIncome, currentRangeTotals.spent]);
-
-  const savingsRate = useMemo(() => {
-    if (totalIncome <= 0) return 0;
-    const rate = (netSavings / totalIncome) * 100;
-    return Math.max(0, Math.round(rate));
-  }, [netSavings, totalIncome]);
+  // Filter transactions matching the active budget period
+  const activePeriodExpenses = useMemo(() => {
+    return expenses.filter(
+      (e) => e.date >= activeRange.startDate && e.date <= activeRange.endDate
+    );
+  }, [expenses, activeRange]);
 
   // Toast System trigger helper
-  const showToast = (message: string, actionLabel?: string, onAction?: () => void) => {
+  const showToast = useCallback((message: string, actionLabel?: string, onAction?: () => void) => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
     }
@@ -459,7 +496,7 @@ function App() {
     toastTimeoutRef.current = window.setTimeout(() => {
       setToast(null);
     }, 5000);
-  };
+  }, []);
 
   // Add Expense/Credit Callback
   const handleSaveExpense = async (data: { amount: number; category: string; note: string; date: string; type: 'debit' | 'credit' }) => {
@@ -476,19 +513,17 @@ function App() {
 
     try {
       if (isOfflineMode) {
-        // Offline Save
         const currentExpenses = [...expenses];
         const savedExpense = {
           ...newExpense,
           id: `local-${Date.now()}`,
           created_at: new Date().toISOString(),
-        };
+        } as Expense;
         const updated = [savedExpense, ...currentExpenses].sort((a, b) => b.date.localeCompare(a.date));
         setExpenses(updated);
         localStorage.setItem('ledger_expenses', JSON.stringify(updated));
         showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
       } else {
-        // Online Save
         const { error } = await supabase.from('expenses').insert([newExpense]);
         if (error) throw error;
         showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
@@ -609,6 +644,7 @@ function App() {
         localStorage.setItem('ledger_budgets_history', JSON.stringify(budgetsList));
         setAllBudgets(budgetsList);
         setShowCarryOverPrompt(false);
+        showToast('Budget configured successfully.');
       } else {
         // Remove currently active budget from Supabase before inserting
         if (activeBudget && activeBudget.id) {
@@ -629,6 +665,7 @@ function App() {
         if (error) throw error;
         
         await fetchData();
+        showToast('Budget configured successfully.');
       }
     } catch (err) {
       console.error('Error saving budget config:', err);
@@ -648,6 +685,61 @@ function App() {
       showToast(`Carried over budget of ₹${previousMonthBudget.toLocaleString('en-IN')}`);
     } catch (err) {
       console.error('Failed carrying over budget:', err);
+    }
+  };
+
+  // Log Savings Callback
+  const handleAddSavings = async (data: { amount: number; type: 'incoming' | 'outgoing'; note: string; date: string }) => {
+    if (!session?.user) return;
+    const newSavings = {
+      user_id: session.user.id,
+      amount: data.amount,
+      type: data.type,
+      note: data.note || null,
+      date: data.date,
+    };
+
+    try {
+      if (isOfflineMode) {
+        const current = [...savings];
+        const saved = {
+          ...newSavings,
+          id: `local-savings-${Date.now()}`,
+          created_at: new Date().toISOString(),
+        } as SavingsTransaction;
+        const updated = [saved, ...current].sort((a, b) => b.date.localeCompare(a.date));
+        setSavings(updated);
+        localStorage.setItem('ledger_savings', JSON.stringify(updated));
+        showToast(data.type === 'incoming' ? 'Savings deposit logged.' : 'Savings withdrawal logged.');
+      } else {
+        const { error } = await supabase.from('savings').insert([newSavings]);
+        if (error) throw error;
+        showToast(data.type === 'incoming' ? 'Savings deposit logged.' : 'Savings withdrawal logged.');
+      }
+    } catch (err) {
+      console.error('Error saving savings transaction:', err);
+      showToast('Could not save savings transaction. Try again.');
+    }
+  };
+
+  // Delete Savings Callback
+  const handleDeleteSavings = async (id: string) => {
+    const filtered = savings.filter((s) => s.id !== id);
+    setSavings(filtered);
+
+    try {
+      if (isOfflineMode) {
+        localStorage.setItem('ledger_savings', JSON.stringify(filtered));
+        showToast('Savings entry deleted.');
+      } else {
+        const { error } = await supabase.from('savings').delete().eq('id', id);
+        if (error) throw error;
+        showToast('Savings entry deleted.');
+      }
+    } catch (err) {
+      console.error('Error deleting savings entry:', err);
+      showToast('Could not delete savings entry.');
+      fetchData();
     }
   };
 
@@ -687,8 +779,6 @@ function App() {
   const currentBalance = budget - currentRangeTotals.spent + currentRangeTotals.credited;
   const isBalanceNegative = currentBalance < 0;
 
-
-
   return (
     <div className="min-h-screen bg-ledgerBg text-ledgerText flex justify-center selection:bg-ledgerMint/25 selection:text-ledgerMint">
       {/* Shell Container: Center max-width 480px */}
@@ -714,16 +804,15 @@ function App() {
               </h1>
             </div>
             
-            {/* Sign Out Button */}
-            {activeTab !== 'settings' && (
-              <button
-                onClick={handleSignOut}
-                className="text-ledgerMuted hover:text-ledgerCoral opacity-40 hover:opacity-100 transition-all p-1.5 rounded-lg hover:bg-ledgerCoral/5"
-                title="Sign Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            )}
+            {/* Configure Budget Trigger Button */}
+            <button
+              onClick={() => setIsBudgetEditorOpen(true)}
+              className="text-ledgerMuted hover:text-ledgerMint transition-all p-2 rounded-lg bg-ledgerElevated/50 border border-ledgerBorder hover:border-ledgerMint/40 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider shadow"
+              title="Configure Budget"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Setup
+            </button>
           </div>
 
           {/* Budget Progress Bar */}
@@ -732,7 +821,7 @@ function App() {
             credited={currentRangeTotals.credited}
             budget={budget}
             rangeLabel={activeRange.label}
-            onSetBudgetClick={() => setActiveTab('settings')}
+            onSetBudgetClick={() => setIsBudgetEditorOpen(true)}
           />
         </header>
 
@@ -762,7 +851,7 @@ function App() {
               <button
                 onClick={() => {
                   setShowCarryOverPrompt(false);
-                  setActiveTab('settings');
+                  setIsBudgetEditorOpen(true);
                 }}
                 className="flex-1 bg-ledgerElevated border border-ledgerBorder text-ledgerMuted font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition hover:text-ledgerText"
               >
@@ -775,161 +864,95 @@ function App() {
         {/* Tab view screens */}
         <main className="flex-1 px-5 pt-4">
           {activeTab === 'expenses' && (
-            <InsightsTab
-              expenses={expenses}
-              activeBudget={activeBudget}
-              activeRange={activeRange}
-              onSaveBudget={handleSaveBudget}
-              hideBudgetConfig={true}
-              hideCharts={false}
-            />
+            <div className="space-y-5 pb-28 animate-fade-in">
+              {/* Breakdown Toggle Button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowBreakdown(!showBreakdown)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold tracking-wide transition-all shadow-sm ${
+                    showBreakdown
+                      ? 'bg-ledgerMint text-[#0F1B1E] border-ledgerMint'
+                      : 'bg-ledgerSurface text-ledgerMint border-ledgerBorder/80 hover:border-ledgerMint/40'
+                  }`}
+                >
+                  <PieChart className="w-3.5 h-3.5 animate-pulse" />
+                  {showBreakdown ? 'Hide Breakdown' : 'View Breakdown'}
+                </button>
+              </div>
+
+              {/* Collapsible Category Breakdown charts */}
+              {showBreakdown && (
+                <div className="animate-slide-up">
+                  <InsightsTab
+                    expenses={expenses}
+                    activeBudget={activeBudget}
+                    activeRange={activeRange}
+                    onSaveBudget={handleSaveBudget}
+                    hideBudgetConfig={true}
+                    hideCharts={false}
+                  />
+                </div>
+              )}
+
+              {/* Core Transactions History for current period */}
+              <div className="space-y-3.5">
+                <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider pl-1">
+                  Active Period Log
+                </h3>
+                <TransactionsTab
+                  expenses={activePeriodExpenses}
+                  onDeleteExpense={handleDeleteExpense}
+                />
+              </div>
+            </div>
           )}
 
           {activeTab === 'savings' && (
-            <div className="space-y-6 pb-28 animate-fade-in">
-              {/* Savings Metrics Grid */}
-              <div className="grid grid-cols-2 gap-3.5">
-                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-4 flex flex-col justify-between shadow-md">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
-                    Total Income
-                  </span>
-                  <div className="mt-2">
-                    <span className="text-xl font-mono font-bold text-ledgerMint tabular-nums">
-                      ₹{totalIncome.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </span>
-                    <p className="text-[9px] text-ledgerMuted mt-1">This active period</p>
-                  </div>
-                </div>
-
-                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-4 flex flex-col justify-between shadow-md">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
-                    Savings Rate
-                  </span>
-                  <div className="mt-2">
-                    <span className={`text-xl font-mono font-bold tabular-nums ${savingsRate >= 20 ? 'text-ledgerMint' : savingsRate > 0 ? 'text-amber-400' : 'text-ledgerMuted'}`}>
-                      {savingsRate}%
-                    </span>
-                    <p className="text-[9px] text-ledgerMuted mt-1">Net saved / Earned</p>
-                  </div>
-                </div>
-
-                <div className="col-span-2 bg-ledgerSurface border border-ledgerBorder rounded-xl p-4 flex justify-between items-center shadow-md">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
-                      Net Period Savings
-                    </span>
-                    <p className={`text-2xl font-mono font-bold tabular-nums mt-1 ${netSavings >= 0 ? 'text-ledgerMint' : 'text-ledgerCoral'}`}>
-                      ₹{netSavings.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className={`p-3 rounded-full ${netSavings >= 0 ? 'bg-ledgerMint/5 text-ledgerMint border border-ledgerMint/10' : 'bg-ledgerCoral/5 text-ledgerCoral border border-ledgerCoral/10'}`}>
-                    <PiggyBank className="w-6 h-6" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Income Credits History */}
-              <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
-                <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
-                  Income Credits Log
-                </h3>
-
-                {savingsTransactions.length === 0 ? (
-                  <p className="text-xs text-ledgerMuted text-center py-6">
-                    No income transactions logged yet. Use "+ Add Transaction" to log income.
-                  </p>
-                ) : (
-                  <div className="divide-y divide-ledgerBorder/40 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
-                    {savingsTransactions.map((tx) => (
-                      <div key={tx.id} className="flex justify-between items-center py-3 first:pt-0 last:pb-0 group">
-                        <div className="min-w-0 pr-2">
-                          <p className="text-xs font-medium text-ledgerText truncate">
-                            {tx.note || 'Income Credit'}
-                          </p>
-                          <span className="text-[9px] text-ledgerMuted font-mono">
-                            {formatDateShort(tx.date)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="font-mono text-xs text-ledgerMint font-semibold tabular-nums">
-                            +₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </span>
-                          <button
-                            onClick={() => handleDeleteExpense(tx.id)}
-                            className="text-ledgerMuted hover:text-ledgerCoral p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+            <SavingsTab
+              savings={savings}
+              onAddSavings={handleAddSavings}
+              onDeleteSavings={handleDeleteSavings}
+            />
           )}
 
           {activeTab === 'logs' && (
-            <div className="pb-28">
-              <TransactionsTab
-                expenses={expenses}
-                onDeleteExpense={handleDeleteExpense}
-              />
-            </div>
+            <PeriodLogsTab
+              expenses={expenses}
+              allBudgets={allBudgets}
+              onDeleteExpense={handleDeleteExpense}
+            />
+          )}
+
+          {activeTab === 'calendar' && (
+            <CalendarTab expenses={expenses} onDeleteExpense={handleDeleteExpense} />
           )}
 
           {activeTab === 'settings' && (
-            <div className="space-y-6 pb-28 animate-fade-in">
-              <InsightsTab
-                expenses={expenses}
-                activeBudget={activeBudget}
-                activeRange={activeRange}
-                onSaveBudget={handleSaveBudget}
-                hideBudgetConfig={false}
-                hideCharts={true}
-              />
-              
-              {/* Additional Account/Settings options */}
-              <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
-                <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
-                  Session & Account
-                </h3>
-                <div className="flex justify-between items-center text-xs">
-                  <div className="min-w-0">
-                    <p className="font-medium text-ledgerText truncate">
-                      {session?.user?.email || 'Offline Sandbox User'}
-                    </p>
-                    <span className="text-[10px] text-ledgerMuted">
-                      Role: Subscriber
-                    </span>
-                  </div>
-                  <button
-                    onClick={handleSignOut}
-                    className="bg-ledgerCoral/10 hover:bg-ledgerCoral/20 border border-ledgerCoral/20 text-ledgerCoral font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Sign Out
-                  </button>
-                </div>
-              </div>
-            </div>
+            <ProfileSettings
+              session={session}
+              isOfflineMode={isOfflineMode}
+              onSignOut={handleSignOut}
+              showToast={(msg) => showToast(msg)}
+            />
           )}
         </main>
 
-        {/* Floating "+ Add Transaction" Button above the Dock */}
-        <div className="fixed bottom-24 left-0 right-0 pointer-events-none flex justify-center z-40">
-          <div className="w-full max-w-[480px] px-6 flex justify-end pointer-events-auto">
-            <button
-              onClick={() => setIsAddSheetOpen(true)}
-              className="bg-ledgerMint hover:bg-ledgerMint/90 text-[#0F1B1E] font-semibold text-xs uppercase tracking-wider py-3 px-5 rounded-full shadow-lg flex items-center gap-1.5 transition-all transform active:scale-95 duration-150 border border-ledgerBg/20 hover:shadow-ledgerMint/15 hover:shadow-xl"
-            >
-              <Plus className="w-4 h-4 stroke-[3px]" />
-              Add Transaction
-            </button>
+        {/* Floating "+ Add Transaction" Button above the Dock (Only visible in expenses/logs tabs) */}
+        {(activeTab === 'expenses' || activeTab === 'logs') && (
+          <div className="fixed bottom-24 left-0 right-0 pointer-events-none flex justify-center z-40">
+            <div className="w-full max-w-[480px] px-6 flex justify-end pointer-events-auto">
+              <button
+                onClick={() => setIsAddSheetOpen(true)}
+                className="bg-ledgerMint hover:bg-ledgerMint/90 text-[#0F1B1E] font-semibold text-xs uppercase tracking-wider py-3 px-5 rounded-full shadow-lg flex items-center gap-1.5 transition-all transform active:scale-95 duration-150 border border-ledgerBg/20 hover:shadow-ledgerMint/15 hover:shadow-xl"
+              >
+                <Plus className="w-4 h-4 stroke-[3px]" />
+                Add Transaction
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Sticky Dock Navigation Bar */}
+        {/* Sticky Dock Navigation Bar (5 Items: Expenses, Savings, Logs, Calendar, Settings) */}
         <div className="fixed bottom-4 left-0 right-0 pointer-events-none flex justify-center z-40">
           <div className="w-full max-w-[480px] px-6 pointer-events-auto flex justify-center">
             <Dock
@@ -953,15 +976,21 @@ function App() {
                   className: activeTab === 'logs' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
                 },
                 {
+                  icon: <CalendarIcon className="w-4 h-4 text-ledgerMint" />,
+                  label: 'Calendar',
+                  onClick: () => setActiveTab('calendar'),
+                  className: activeTab === 'calendar' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                },
+                {
                   icon: <Settings className="w-4 h-4 text-ledgerMint" />,
                   label: 'Settings',
                   onClick: () => setActiveTab('settings'),
                   className: activeTab === 'settings' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
                 }
               ]}
-              panelHeight={60}
-              baseItemSize={46}
-              magnification={58}
+              panelHeight={52}
+              baseItemSize={38}
+              magnification={50}
             />
           </div>
         </div>
@@ -987,11 +1016,20 @@ function App() {
           </div>
         )}
 
-        {/* Add Expense bottom sheet modal */}
+        {/* Add Transaction slide-up modal */}
         {isAddSheetOpen && (
           <AddExpenseSheet
             onClose={() => setIsAddSheetOpen(false)}
             onSave={handleSaveExpense}
+          />
+        )}
+
+        {/* Configure Budget Active Slide-up modal */}
+        {isBudgetEditorOpen && (
+          <ConfigureBudgetSheet
+            activeBudget={activeBudget}
+            onClose={() => setIsBudgetEditorOpen(false)}
+            onSave={handleSaveBudget}
           />
         )}
       </div>
