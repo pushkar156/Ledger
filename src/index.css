@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ledgerBg: #0F1B1E;
+  --color-ledgerSurface: #16262A;
+  --color-ledgerElevated: #1C2E32;
+  --color-ledgerBorder: rgba(234,242,240,0.08);
+  --color-ledgerText: #EAF2F0;
+  --color-ledgerMuted: #8FA8A3;
+  --color-ledgerMint: #7FE7C4;
+  --color-ledgerCoral: #E8615A;
+  
+  /* Category colors */
+  --color-catAmber: #E8A94C;
+  --color-catBlue: #6FA8DC;
+  --color-catLavender: #C792EA;
+  --color-catSand: #F2D06B;
+  --color-catSage: #6FD1A0;
+  --color-catGrey: #9AA8A5;
+  --color-catMint: #7FE7C4;
+  --color-catCoral: #E8615A;
+
+  --font-sans: -apple-system, "Segoe UI", Inter, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Roboto Mono", monospace;
+}
+
+@utility tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer base {
+  body {
+    background-color: #0F1B1E;
+    color: #EAF2F0;
+    font-family: -apple-system, "Segoe UI", Inter, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Scrollbar for premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0F1B1E;
+}
+::-webkit-scrollbar-thumb {
+  background: #1C2E32;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7FE7C4;
+}
+
+/* Slide up animation for Bottom Sheet */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Fade in for dialog overlay */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}
+
+/* Set up standard input styles */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #7FE7C4 !important;
+  box-shadow: 0 0 0 1px rgba(127, 231, 196, 0.2);
+}
