@@ -566,25 +566,32 @@ function App() {
         const localBgHistory = localStorage.getItem('ledger_budgets_history');
         let budgetsList: Budget[] = localBgHistory ? JSON.parse(localBgHistory) : [];
         
+        // Remove currently active budget if we are replacing it
+        if (activeBudget && activeBudget.id) {
+          budgetsList = budgetsList.filter((b) => b.id !== activeBudget.id);
+        } else if (data.type === 'monthly') {
+          budgetsList = budgetsList.filter(
+            (b) => !(b.type === 'monthly' && b.month === currentMonthStr)
+          );
+        }
+
         const newLocalBudget: Budget = {
           ...newBudget,
           id: `local-budget-${Date.now()}`,
         } as Budget;
 
-        if (data.type === 'monthly') {
-          // Remove old monthly budgets for this month
-          budgetsList = budgetsList.filter(
-            (b) => !(b.type === 'monthly' && b.month === currentMonthStr)
-          );
-        }
-        
         budgetsList.push(newLocalBudget);
         localStorage.setItem('ledger_budgets_history', JSON.stringify(budgetsList));
         setAllBudgets(budgetsList);
         setShowCarryOverPrompt(false);
       } else {
-        if (data.type === 'monthly') {
-          // Delete old monthly entry first to align with unique index
+        // Remove currently active budget from Supabase before inserting
+        if (activeBudget && activeBudget.id) {
+          await supabase
+            .from('budgets')
+            .delete()
+            .eq('id', activeBudget.id);
+        } else if (data.type === 'monthly') {
           await supabase
             .from('budgets')
             .delete()

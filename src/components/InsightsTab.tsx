@@ -45,9 +45,9 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
   // Custom Date fields
   const [startDate, setStartDate] = useState(getLocalDateString());
   const [endDate, setEndDate] = useState(() => {
-    const defaultEnd = new Date();
-    defaultEnd.setDate(defaultEnd.getDate() + 30);
-    return getLocalDateString(defaultEnd);
+    const today = new Date();
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    return getLocalDateString(endOfMonth);
   });
   
   const [saving, setSaving] = useState(false);
