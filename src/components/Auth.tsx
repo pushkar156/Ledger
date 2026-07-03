@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Lock, Mail, Loader2 } from 'lucide-react';
+import { Lock, Mail, Loader2, Eye, EyeOff, User } from 'lucide-react';
 
 interface AuthProps {
   onAuthSuccess: () => void;
@@ -8,8 +8,10 @@ interface AuthProps {
 
 export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [isSignUp, setIsSignUp] = useState(false);
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,9 +22,19 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
 
     try {
       if (isSignUp) {
+        if (!fullName.trim()) {
+          throw new Error('Please enter your full name.');
+        }
+
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              full_name: fullName.trim(),
+              avatar_emoji: '📊', // Default avatar
+            }
+          }
         });
         
         if (signUpError) throw signUpError;
@@ -64,6 +76,25 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
 
         {/* Auth Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isSignUp && (
+            <div className="animate-slide-up">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-ledgerMuted mb-2">
+                Full Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ledgerMuted" />
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Your Name"
+                  className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-4 text-sm transition focus:border-ledgerMint focus:ring-1 focus:ring-ledgerMint"
+                />
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-ledgerMuted mb-2">
               Email Address
@@ -88,13 +119,20 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ledgerMuted" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-4 text-sm transition focus:border-ledgerMint focus:ring-1 focus:ring-ledgerMint"
+                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 text-sm transition focus:border-ledgerMint focus:ring-1 focus:ring-ledgerMint"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

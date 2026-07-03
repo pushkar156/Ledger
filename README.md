@@ -1,6 +1,8 @@
 # 📊 Ledger — Personal Finance Tracker
 
-Ledger is a calm, precise, and lightning-fast Progressive Web App (PWA) designed to monitor daily spending, track recurring subscriptions, and manage savings balances on a clean, modern interface. 
+Ledger is a calm, precise, and lightning-fast Progressive Web App (PWA) designed to monitor daily spending, track recurring subscriptions, and manage savings balances on a clean, modern interface.
+
+You can try the live application here: **[https://ledger-daily.vercel.app/](https://ledger-daily.vercel.app/)**
 
 It is built with React, Vite, Tailwind CSS, Framer Motion, and includes seamless integration with Supabase for real-time cloud sync, alongside a fully functioning local sandbox fallback.
 
@@ -100,6 +102,16 @@ TO authenticated
 USING (auth.uid() = user_id::uuid) 
 WITH CHECK (auth.uid() = user_id::uuid);
 ```
+
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are welcome! Feel free to check the issues page or open a pull request.
+
+1. Fork the Project.
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`).
+4. Push to the Branch (`git push origin feature/AmazingFeature`).
+5. Open a Pull Request.
 
 ## 📄 License
 

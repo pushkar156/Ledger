@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, Mail, Lock, CheckCircle, AlertCircle, Camera, Smartphone } from 'lucide-react';
+import { User, Mail, Lock, CheckCircle, AlertCircle, Camera, Smartphone, LogOut, Eye, EyeOff } from 'lucide-react';
 import { ThemeToggle } from './ui/ThemeToggle';
 
 interface ProfileSettingsProps {
@@ -23,11 +23,19 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   isAppInstalled,
   deferredPrompt,
   onInstallApp,
+  onSignOut,
 }) => {
   const [fullName, setFullName] = useState('');
   const [avatarEmoji, setAvatarEmoji] = useState('📊');
+  const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -86,13 +94,23 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+  const triggerPasswordConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
     setPasswordSuccess(false);
 
+    if (isOfflineMode) {
+      setValidationError('Password changes are not available in offline sandbox mode.');
+      return;
+    }
+
+    if (!oldPassword) {
+      setValidationError('Please enter your current password.');
+      return;
+    }
+
     if (!newPassword || newPassword.length < 6) {
-      setValidationError('Password must be at least 6 characters.');
+      setValidationError('New password must be at least 6 characters.');
       return;
     }
 
@@ -101,25 +119,34 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       return;
     }
 
+    setShowConfirmModal(true);
+  };
+
+  const handleUpdatePassword = async () => {
+    setShowConfirmModal(false);
     setSavingPassword(true);
     try {
-      if (isOfflineMode) {
-        await new Promise((r) => setTimeout(r, 800));
-        setPasswordSuccess(true);
-        setNewPassword('');
-        setConfirmPassword('');
-        showToast('Password updated successfully.');
-      } else {
-        const { error } = await supabase.auth.updateUser({
-          password: newPassword,
-        });
-        if (error) throw error;
+      // 1. Verify old password first by attempting a re-login check
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: session.user.email,
+        password: oldPassword,
+      });
 
-        setPasswordSuccess(true);
-        setNewPassword('');
-        setConfirmPassword('');
-        showToast('Password updated successfully.');
+      if (verifyError) {
+        throw new Error('Current password verification failed. Please try again.');
       }
+
+      // 2. Update to new password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (updateError) throw updateError;
+
+      setPasswordSuccess(true);
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      showToast('Password updated successfully.');
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err: any) {
       console.error(err);
@@ -241,7 +268,33 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           Change Password
         </h3>
 
-        <form onSubmit={handleUpdatePassword} className="space-y-3.5">
+        <form onSubmit={triggerPasswordConfirm} className="space-y-3.5">
+          <div className="space-y-1">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
+              Current Password
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-ledgerMuted">
+                <Lock className="w-4 h-4" />
+              </span>
+              <input
+                type={showOldPassword ? 'text' : 'password'}
+                required
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 font-sans text-xs transition"
+              />
+              <button
+                type="button"
+                onClick={() => setShowOldPassword(!showOldPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
+              >
+                {showOldPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-1">
             <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
               New Password
@@ -251,13 +304,20 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                 <Lock className="w-4 h-4" />
               </span>
               <input
-                type="password"
+                type={showNewPassword ? 'text' : 'password'}
                 required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-4 font-sans text-xs transition"
+                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 font-sans text-xs transition"
               />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
+              >
+                {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -270,13 +330,20 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                 <Lock className="w-4 h-4" />
               </span>
               <input
-                type="password"
+                type={showConfirmPassword ? 'text' : 'password'}
                 required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-4 font-sans text-xs transition"
+                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 font-sans text-xs transition"
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
+              >
+                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -297,6 +364,30 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         )}
       </div>
 
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50 animate-fade-in">
+          <div className="bg-ledgerSurface rounded-xl shadow-2xl p-6 w-[340px] max-w-full border border-ledgerBorder flex flex-col">
+            <h3 className="text-sm font-bold text-ledgerText mb-1.5 uppercase tracking-wider">Confirm Password Change</h3>
+            <p className="text-xs text-ledgerMuted mb-5 leading-normal">Are you sure you want to update your account password? You will need to log in again using the new credentials.</p>
+            <div className="flex justify-end gap-2.5">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-ledgerElevated hover:bg-ledgerElevated/70 text-ledgerMuted transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdatePassword}
+                className="px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-ledgerMint text-[#0F1B1E] hover:bg-ledgerMint/90 transition shadow-sm"
+              >
+                Confirm Change
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PWA App Installation Control Card */}
       {!isAppInstalled && deferredPrompt && (
         <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
@@ -315,6 +406,20 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           </button>
         </div>
       )}
+
+      {/* Account Control Actions - Sign Out */}
+      <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
+        <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
+          Account Actions
+        </h3>
+        <button
+          onClick={onSignOut}
+          className="w-full bg-ledgerCoral/10 hover:bg-ledgerCoral/20 border border-ledgerCoral/20 text-ledgerCoral font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          Sign Out of Account
+        </button>
+      </div>
 
       {validationError && (
         <p className="text-xs text-ledgerCoral mt-2 flex items-center gap-1.5 justify-center animate-fade-in bg-ledgerCoral/5 border border-ledgerCoral/10 py-2.5 rounded-lg">
