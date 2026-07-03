@@ -4,7 +4,7 @@ interface BudgetBarProps {
   spent: number;
   credited: number;
   budget: number;
-  rangeLabel: string;
+  activeRange: { startDate: string; endDate: string; label: string; isCustom: boolean };
   onSetBudgetClick: () => void;
 }
 
@@ -12,7 +12,7 @@ export const BudgetBar: React.FC<BudgetBarProps> = ({
   spent,
   credited,
   budget,
-  rangeLabel,
+  activeRange,
   onSetBudgetClick,
 }) => {
   const netSpent = spent - credited;
@@ -25,6 +25,23 @@ export const BudgetBar: React.FC<BudgetBarProps> = ({
   // Percentage of budget consumed
   const percentage = budget > 0 ? (netSpent / budget) * 100 : 0;
   const cappedPercentage = Math.max(0, Math.min(100, percentage));
+
+  // Helper to parse dates to local days count remaining
+  const getRemainingDays = (endDateStr: string): number => {
+    const today = new Date();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    const [year, month, day] = endDateStr.split('-').map(Number);
+    const endMidnight = new Date(year, month - 1, day);
+    
+    const diffTime = endMidnight.getTime() - todayMidnight.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return Math.max(1, diffDays + 1);
+  };
+
+  const remainingDays = getRemainingDays(activeRange.endDate);
+  const dailyBudget = remainingBalance > 0 ? (remainingBalance / remainingDays) : 0;
 
   return (
     <div className="mt-3">
@@ -42,13 +59,20 @@ export const BudgetBar: React.FC<BudgetBarProps> = ({
           
           {/* Labeling and calculations */}
           <div className="flex justify-between items-center text-xs text-ledgerMuted">
-            <span className="font-mono">
-              Balance: <span className={isBalanceNegative ? 'text-ledgerCoral font-semibold' : 'text-[#7FE7C4] font-semibold'}>
-                ₹{remainingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className="font-mono flex flex-col sm:flex-row sm:items-center gap-1">
+              <span>
+                Balance: <span className={isBalanceNegative ? 'text-ledgerCoral font-semibold' : 'text-[#7FE7C4] font-semibold'}>
+                  ₹{remainingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </span>
+              {!isBalanceNegative && (
+                <span className="text-[10px] opacity-80 sm:before:content-['•'] sm:before:mx-1 sm:before:text-ledgerMuted">
+                  ₹{dailyBudget.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/day ({remainingDays}d left)
+                </span>
+              )}
             </span>
             <span className="font-sans text-[10px] text-ledgerMuted opacity-70">
-              {rangeLabel}
+              {activeRange.label}
             </span>
             <span className={`font-mono font-medium ${isOverBudget ? 'text-ledgerCoral' : 'text-ledgerMint'}`}>
               {percentage.toFixed(0)}% used

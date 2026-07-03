@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { Expense, Budget } from '../types';
 import { CATEGORIES } from '../constants/categories';
 import {
@@ -11,7 +11,7 @@ import {
   XAxis,
   Tooltip,
 } from 'recharts';
-import { Save, AlertCircle, TrendingUp, Calendar, CalendarRange } from 'lucide-react';
+import { Save, AlertCircle, TrendingUp, Calendar, CalendarRange, Clock, Sparkles } from 'lucide-react';
 
 interface InsightsTabProps {
   expenses: Expense[];
@@ -194,6 +194,82 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
       amount: dayTotal,
     });
   }
+
+  // Heuristics Calculations for Smart Insights
+  const insights = useMemo(() => {
+    if (!activeBudget || scopedExpenses.length === 0) return null;
+
+    const getDaysDifference = (startStr: string, endStr: string): number => {
+      const [sy, sm, sd] = startStr.split('-').map(Number);
+      const [ey, em, ed] = endStr.split('-').map(Number);
+      const sDate = new Date(sy, sm - 1, sd);
+      const eDate = new Date(ey, em - 1, ed);
+      const diff = eDate.getTime() - sDate.getTime();
+      return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1);
+    };
+
+    const todayStr = getLocalDateString();
+    const totalPeriodDays = getDaysDifference(activeRange.startDate, activeRange.endDate);
+    
+    let elapsedDays = 1;
+    if (todayStr >= activeRange.startDate) {
+      const targetEnd = todayStr < activeRange.endDate ? todayStr : activeRange.endDate;
+      elapsedDays = getDaysDifference(activeRange.startDate, targetEnd);
+    }
+    
+    const remainingDays = Math.max(0, totalPeriodDays - elapsedDays);
+    const averageSpentPerDay = scopedTotal / elapsedDays;
+    
+    const limit = Number(activeBudget.monthly);
+    
+    const projectedTotalSpend = averageSpentPerDay * totalPeriodDays;
+    const isProjectedOver = projectedTotalSpend > limit;
+    const projectedDifference = Math.abs(limit - projectedTotalSpend);
+    
+    const topCategory = donutData[0];
+    const categoryPct = topCategory && scopedTotal > 0 ? (topCategory.value / scopedTotal) * 100 : 0;
+    
+    const parseDateOffset = (offset: number): string => {
+      const d = new Date();
+      d.setDate(d.getDate() - offset);
+      return getLocalDateString(d);
+    };
+    
+    const d7 = parseDateOffset(7);
+    const d14 = parseDateOffset(14);
+    
+    const last7DaysTotal = expenses
+      .filter((e) => e.date >= d7 && e.type !== 'credit')
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+      
+    const prev7DaysTotal = expenses
+      .filter((e) => e.date >= d14 && e.date < d7 && e.type !== 'credit')
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+      
+    let wowPercentage = 0;
+    let wowDirection: 'up' | 'down' | 'flat' = 'flat';
+    if (prev7DaysTotal > 0) {
+      wowPercentage = Math.abs(((last7DaysTotal - prev7DaysTotal) / prev7DaysTotal) * 100);
+      wowDirection = last7DaysTotal > prev7DaysTotal ? 'up' : 'down';
+    } else if (last7DaysTotal > 0) {
+      wowPercentage = 100;
+      wowDirection = 'up';
+    }
+
+    return {
+      averageSpentPerDay,
+      remainingDays,
+      isProjectedOver,
+      projectedDifference,
+      projectedTotalSpend,
+      topCategory,
+      categoryPct,
+      wowPercentage,
+      wowDirection,
+      last7DaysTotal,
+      prev7DaysTotal,
+    };
+  }, [scopedExpenses, scopedTotal, activeBudget, activeRange, expenses, donutData]);
 
   const hasExpenses = expenses.length > 0;
 
@@ -454,6 +530,94 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                 </ResponsiveContainer>
               </div>
             </div>
+
+            {/* 4. Smart Insights Heuristics Deck */}
+            {insights && (
+              <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg space-y-4">
+                <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-ledgerMint" />
+                  Smart Insights
+                </h3>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs text-ledgerMuted">
+                  {/* Insight 1: Daily Burn Rate */}
+                  <div className="p-3.5 rounded-lg bg-ledgerElevated/30 border border-ledgerBorder/40 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-semibold text-ledgerText mb-1 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-ledgerMint" />
+                        Daily Burn Rate
+                      </h4>
+                      <p className="leading-normal">
+                        You are spending an average of <span className="font-mono text-ledgerText font-bold">₹{insights.averageSpentPerDay.toLocaleString('en-IN', { maximumFractionDigits: 0 })}/day</span>.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Insight 2: Budget Lifespan Projections */}
+                  <div className={`p-3.5 rounded-lg border flex flex-col justify-between ${
+                    insights.isProjectedOver 
+                      ? 'bg-ledgerCoral/5 border-ledgerCoral/20 text-ledgerCoral'
+                      : 'bg-ledgerMint/5 border-ledgerMint/20 text-[#7FE7C4]'
+                  }`}>
+                    <div>
+                      <h4 className="font-semibold mb-1 flex items-center gap-1.5 text-ledgerText">
+                        <AlertCircle className={`w-3.5 h-3.5 ${insights.isProjectedOver ? 'text-ledgerCoral' : 'text-ledgerMint'}`} />
+                        Budget Projection
+                      </h4>
+                      <p className="leading-normal">
+                        {insights.isProjectedOver ? (
+                          <>
+                            Warning: Projected to exceed budget by <span className="font-mono text-ledgerCoral font-bold">₹{insights.projectedDifference.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>.
+                          </>
+                        ) : (
+                          <>
+                            Looking good! Projected to finish under budget by <span className="font-mono text-ledgerMint font-bold">₹{insights.projectedDifference.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Insight 3: Category Dominance */}
+                  {insights.topCategory && (
+                    <div className="p-3.5 rounded-lg bg-ledgerElevated/30 border border-ledgerBorder/40 flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-semibold text-ledgerText mb-1 flex items-center gap-1.5">
+                          <span className="text-sm">{insights.topCategory.emoji}</span>
+                          Top Expense Category
+                        </h4>
+                        <p className="leading-normal">
+                          <span className="font-bold text-ledgerText">{insights.topCategory.name}</span> is your highest spending category, consuming <span className="font-bold text-ledgerText">{insights.categoryPct.toFixed(0)}%</span> of total expenses.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Insight 4: Week-over-Week */}
+                  <div className="p-3.5 rounded-lg bg-ledgerElevated/30 border border-ledgerBorder/40 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-semibold text-ledgerText mb-1 flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5 text-ledgerMint" />
+                        Weekly Momentum
+                      </h4>
+                      <p className="leading-normal">
+                        {insights.wowDirection === 'flat' ? (
+                          "Your spending has remained flat compared to last week."
+                        ) : (
+                          <>
+                            Weekly spend is {insights.wowDirection === 'up' ? 'up' : 'down'} by{' '}
+                            <span className={`font-bold ${insights.wowDirection === 'up' ? 'text-ledgerCoral' : 'text-ledgerMint'}`}>
+                              {insights.wowPercentage.toFixed(0)}%
+                            </span>{' '}
+                            compared to the previous 7 days.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )
       )}

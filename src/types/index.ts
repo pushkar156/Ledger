@@ -30,3 +30,14 @@ export interface SavingsTransaction {
   date: string; // YYYY-MM-DD format
   created_at: string;
 }
+
+export interface RecurringTransaction {
+  id: string;
+  user_id: string;
+  amount: number;
+  category: string;
+  note: string;
+  type: 'debit' | 'credit';
+  dayOfMonth: number;
+  created_at: string;
+}

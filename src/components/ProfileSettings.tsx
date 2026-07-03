@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, Mail, Lock, LogOut, CheckCircle, AlertCircle, Camera } from 'lucide-react';
+import { User, Mail, Lock, CheckCircle, AlertCircle, Camera } from 'lucide-react';
 
 interface ProfileSettingsProps {
   session: any;
@@ -15,7 +15,6 @@ const AVATAR_OPTIONS = ['📊', '💼', '🧘', '💸', '🍀', '☕'];
 export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   session,
   isOfflineMode,
-  onSignOut,
   showToast,
 }) => {
   const [fullName, setFullName] = useState('');

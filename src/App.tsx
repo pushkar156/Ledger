@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase, hasSupabaseCreds } from './lib/supabase';
-import type { Expense, Budget, SavingsTransaction } from './types';
+import type { Expense, Budget, SavingsTransaction, RecurringTransaction } from './types';
 import { Auth } from './components/Auth';
 import { BudgetBar } from './components/BudgetBar';
 import { TransactionsTab } from './components/TransactionsTab';
@@ -11,6 +11,7 @@ import { SavingsTab } from './components/SavingsTab';
 import { PeriodLogsTab } from './components/PeriodLogsTab';
 import { CalendarTab } from './components/CalendarTab';
 import { ProfileSettings } from './components/ProfileSettings';
+import { RecurringTab } from './components/RecurringTab';
 import Dock from './components/Dock';
 import {
   Plus,
@@ -26,6 +27,7 @@ import {
   Calendar as CalendarIcon,
   SlidersHorizontal,
   PieChart,
+  Repeat,
 } from 'lucide-react';
 
 // Relative date generator helper for offline seeding
@@ -184,13 +186,14 @@ function App() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
   const [savings, setSavings] = useState<SavingsTransaction[]>([]);
+  const [recurring, setRecurring] = useState<RecurringTransaction[]>([]);
   
   // New Month Carry Over Banner states
   const [showCarryOverPrompt, setShowCarryOverPrompt] = useState(false);
   const [previousMonthBudget, setPreviousMonthBudget] = useState<number | null>(null);
   
   // Tab states
-  const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'calendar' | 'settings'>('expenses');
+  const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'calendar' | 'recurring' | 'settings'>('expenses');
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [isBudgetEditorOpen, setIsBudgetEditorOpen] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -333,7 +336,7 @@ function App() {
     }
   }, [isOfflineMode]);
 
-  // Fetch Data (Expenses, Budgets, and Savings)
+  // Fetch Data (Expenses, Budgets, Savings, and Recurring)
   const fetchData = useCallback(async () => {
     if (!session?.user) return;
     setLoading(true);
@@ -346,6 +349,7 @@ function App() {
         const localEx = localStorage.getItem('ledger_expenses');
         const localBgHistory = localStorage.getItem('ledger_budgets_history');
         const localSav = localStorage.getItem('ledger_savings');
+        const localRec = localStorage.getItem('ledger_recurring');
         
         const parsedExpenses: Expense[] = localEx ? JSON.parse(localEx) : [];
         setExpenses(parsedExpenses);
@@ -356,8 +360,14 @@ function App() {
         const parsedSavings: SavingsTransaction[] = localSav ? JSON.parse(localSav) : [];
         setSavings(parsedSavings);
 
+        const parsedRecurring: RecurringTransaction[] = localRec ? JSON.parse(localRec) : [];
+        setRecurring(parsedRecurring);
+
         // Run cleanup
         cleanupDuplicateBudgets(budgetsList, parsedExpenses);
+
+        // Run Recurring Transaction Checks
+        await checkAndTriggerRecurring(parsedExpenses, parsedRecurring);
 
         // Compute carry over triggers
         const todayStr = getLocalDateString();
@@ -408,8 +418,25 @@ function App() {
         if (savingsRes.error) throw savingsRes.error;
         setSavings(savingsRes.data || []);
 
+        // Load recurring transactions from Supabase with fallback to local storage
+        let parsedRecurring: RecurringTransaction[] = [];
+        try {
+          const { data: recData, error: recError } = await supabase.from('recurring_expenses').select('*');
+          if (recError) throw recError;
+          parsedRecurring = recData || [];
+          setRecurring(parsedRecurring);
+        } catch (err) {
+          console.warn('Supabase recurring_expenses table fetch failed, falling back to local storage:', err);
+          const localRec = localStorage.getItem('ledger_recurring');
+          parsedRecurring = localRec ? JSON.parse(localRec) : [];
+          setRecurring(parsedRecurring);
+        }
+
         // Run cleanup
         cleanupDuplicateBudgets(budgetsList, parsedExpenses);
+
+        // Run Recurring Transaction Checks
+        await checkAndTriggerRecurring(parsedExpenses, parsedRecurring);
 
         // Compute carry over triggers
         const todayStr = getLocalDateString();
@@ -703,6 +730,175 @@ function App() {
       showToast('Could not delete budget period.');
       // Re-fetch data on failure to restore state
       fetchData();
+    }
+  };
+
+  // Heuristics Auto-Bill Recurring Scheduler Trigger Callback
+  const checkAndTriggerRecurring = useCallback(async (currentExpenses: Expense[], currentRecurring: RecurringTransaction[]) => {
+    if (!session?.user || currentRecurring.length === 0) return;
+
+    const todayStr = getLocalDateString();
+    const lastCheckStr = localStorage.getItem('ledger_last_recurring_check');
+
+    if (lastCheckStr === todayStr) return;
+
+    let startDate = new Date();
+    if (lastCheckStr) {
+      const [ly, lm, ld] = lastCheckStr.split('-').map(Number);
+      startDate = new Date(ly, lm - 1, ld + 1);
+    } else {
+      startDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    }
+
+    const todayDate = new Date();
+    const datesToCheck: string[] = [];
+
+    let tempDate = new Date(startDate);
+    while (tempDate <= todayDate) {
+      const year = tempDate.getFullYear();
+      const month = String(tempDate.getMonth() + 1).padStart(2, '0');
+      const day = String(tempDate.getDate()).padStart(2, '0');
+      datesToCheck.push(`${year}-${month}-${day}`);
+      tempDate.setDate(tempDate.getDate() + 1);
+    }
+
+    if (datesToCheck.length === 0) return;
+
+    const newTransactions: any[] = [];
+
+    for (const dateVal of datesToCheck) {
+      const dayVal = Number(dateVal.substring(8, 10));
+
+      const matchingRules = currentRecurring.filter((r) => r.dayOfMonth === dayVal);
+
+      for (const rule of matchingRules) {
+        const alreadyLogged = currentExpenses.some(
+          (e) => e.date === dateVal && 
+                 e.category === rule.category && 
+                 Number(e.amount) === Number(rule.amount) && 
+                 e.note === rule.note
+        );
+
+        if (!alreadyLogged) {
+          newTransactions.push({
+            user_id: session.user.id,
+            amount: rule.amount,
+            category: rule.category,
+            note: rule.note,
+            date: dateVal,
+            type: rule.type,
+          });
+        }
+      }
+    }
+
+    if (newTransactions.length > 0) {
+      try {
+        if (isOfflineMode) {
+          const localSavedTransactions = newTransactions.map((tx, idx) => ({
+            ...tx,
+            id: `local-rec-trigger-${Date.now()}-${idx}`,
+            created_at: new Date().toISOString(),
+          })) as Expense[];
+
+          const updated = [...localSavedTransactions, ...currentExpenses].sort((a, b) => b.date.localeCompare(a.date));
+          setExpenses(updated);
+          localStorage.setItem('ledger_expenses', JSON.stringify(updated));
+          showToast(`Auto-logged ${newTransactions.length} recurring transaction(s).`);
+        } else {
+          const { error } = await supabase.from('expenses').insert(newTransactions);
+          if (error) throw error;
+          
+          const { data: updatedExpenses } = await supabase
+            .from('expenses')
+            .select('*')
+            .order('date', { ascending: false })
+            .order('created_at', { ascending: false });
+          if (updatedExpenses) {
+            setExpenses(updatedExpenses);
+          }
+          showToast(`Auto-logged ${newTransactions.length} recurring transaction(s).`);
+        }
+      } catch (err) {
+        console.error('Failed to auto-log recurring transactions:', err);
+      }
+    }
+
+    localStorage.setItem('ledger_last_recurring_check', todayStr);
+  }, [session, isOfflineMode, showToast]);
+
+  // Add Recurring Template Callback
+  const handleAddRecurring = async (data: {
+    amount: number;
+    category: string;
+    note: string;
+    type: 'debit' | 'credit';
+    dayOfMonth: number;
+  }) => {
+    if (!session?.user) return;
+
+    const newRule: Partial<RecurringTransaction> = {
+      user_id: session.user.id,
+      amount: data.amount,
+      category: data.category,
+      note: data.note,
+      type: data.type,
+      dayOfMonth: data.dayOfMonth,
+    };
+
+    try {
+      if (isOfflineMode) {
+        const updated = [...recurring, {
+          ...newRule,
+          id: `local-rec-rule-${Date.now()}`,
+          created_at: new Date().toISOString(),
+        } as RecurringTransaction];
+        setRecurring(updated);
+        localStorage.setItem('ledger_recurring', JSON.stringify(updated));
+        showToast('Recurring auto-bill configured.');
+      } else {
+        const { error } = await supabase.from('recurring_expenses').insert([newRule]);
+        if (error) {
+          console.warn('Failed to insert rule into Supabase, saving locally:', error);
+          const updated = [...recurring, {
+            ...newRule,
+            id: `local-rec-rule-${Date.now()}`,
+            created_at: new Date().toISOString(),
+          } as RecurringTransaction];
+          setRecurring(updated);
+          localStorage.setItem('ledger_recurring', JSON.stringify(updated));
+        } else {
+          const { data: recData } = await supabase.from('recurring_expenses').select('*');
+          if (recData) setRecurring(recData);
+        }
+        showToast('Recurring auto-bill configured.');
+      }
+    } catch (err) {
+      console.error('Failed to configure recurring rule:', err);
+      showToast('Could not save configuration. Try again.');
+    }
+  };
+
+  // Delete Recurring Template Callback
+  const handleDeleteRecurring = async (id: string) => {
+    const updated = recurring.filter((r) => r.id !== id);
+    setRecurring(updated);
+
+    try {
+      if (isOfflineMode) {
+        localStorage.setItem('ledger_recurring', JSON.stringify(updated));
+        showToast('Auto-bill configuration removed.');
+      } else {
+        const { error } = await supabase.from('recurring_expenses').delete().eq('id', id);
+        if (error) {
+          console.warn('Failed to delete from Supabase, fallback locally:', error);
+          localStorage.setItem('ledger_recurring', JSON.stringify(updated));
+        }
+        showToast('Auto-bill configuration removed.');
+      }
+    } catch (err) {
+      console.error('Failed to delete recurring rule:', err);
+      showToast('Could not delete configuration.');
     }
   };
 
@@ -1009,7 +1205,7 @@ function App() {
             spent={currentRangeTotals.spent}
             credited={currentRangeTotals.credited}
             budget={budget}
-            rangeLabel={activeRange.label}
+            activeRange={activeRange}
             onSetBudgetClick={() => setIsBudgetEditorOpen(true)}
           />
         </header>
@@ -1117,6 +1313,14 @@ function App() {
             <CalendarTab expenses={expenses} onDeleteExpense={handleDeleteExpense} />
           )}
 
+          {activeTab === 'recurring' && (
+            <RecurringTab
+              recurring={recurring}
+              onAddRecurring={handleAddRecurring}
+              onDeleteRecurring={handleDeleteRecurring}
+            />
+          )}
+
           {activeTab === 'settings' && (
             <ProfileSettings
               session={session}
@@ -1170,6 +1374,12 @@ function App() {
                   label: 'Calendar',
                   onClick: () => setActiveTab('calendar'),
                   className: activeTab === 'calendar' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                },
+                {
+                  icon: <Repeat className="w-4 h-4 text-ledgerMint" />,
+                  label: 'Auto-Bill',
+                  onClick: () => setActiveTab('recurring'),
+                  className: activeTab === 'recurring' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
                 },
                 {
                   icon: <Settings className="w-4 h-4 text-ledgerMint" />,
