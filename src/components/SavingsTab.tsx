@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { SavingsTransaction } from '../types';
 import { PiggyBank, ArrowUpRight, ArrowDownLeft, Plus, Trash2, Calendar, Clipboard } from 'lucide-react';
+import { AnimatedNumber } from './ui/AnimatedNumber';
+import { EmptyState } from './ui/EmptyState';
 
 interface SavingsTabProps {
   savings: SavingsTransaction[];
@@ -40,7 +42,8 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
   const [date, setDate] = useState(getLocalDateString());
   const [saving, setSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [showBalance, setShowBalance] = useState(true);
+  // Default showBalance to false (hidden by default)
+  const [showBalance, setShowBalance] = useState(false);
 
   // 1. Calculations
   const totalDeposited = savings
@@ -95,7 +98,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
           <div className="mt-2 flex items-baseline gap-1">
             <ArrowDownLeft className="w-3.5 h-3.5 text-ledgerMint flex-shrink-0" />
             <span className="text-lg font-mono font-bold text-ledgerMint truncate tabular-nums">
-              ₹{totalDeposited.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              ₹<AnimatedNumber value={totalDeposited} precision={2} />
             </span>
           </div>
         </div>
@@ -107,7 +110,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
           <div className="mt-2 flex items-baseline gap-1">
             <ArrowUpRight className="w-3.5 h-3.5 text-ledgerCoral flex-shrink-0" />
             <span className="text-lg font-mono font-bold text-ledgerCoral truncate tabular-nums">
-              ₹{totalWithdrawn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              ₹<AnimatedNumber value={totalWithdrawn} precision={2} />
             </span>
           </div>
         </div>
@@ -117,9 +120,15 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
             <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
               Net Savings Balance
             </span>
-            <p className={`text-2xl font-mono font-bold tabular-nums mt-1 ${isBalanceNegative ? 'text-ledgerCoral' : 'text-ledgerMint'}`}>
-              {showBalance ? `₹${savingsBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '₹ ••••••'}
-            </p>
+            <div className={`text-2xl font-mono font-bold tabular-nums mt-1 ${isBalanceNegative ? 'text-ledgerCoral' : 'text-ledgerMint'}`}>
+              {showBalance ? (
+                <>
+                  ₹<AnimatedNumber value={savingsBalance} precision={2} />
+                </>
+              ) : (
+                '₹ ••••••'
+              )}
+            </div>
           </div>
           <button
             onClick={() => setShowBalance(!showBalance)}
@@ -266,9 +275,10 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
         </div>
 
         {savings.length === 0 ? (
-          <p className="text-xs text-ledgerMuted text-center py-6">
-            No savings transactions logged yet. Move funds using the form above.
-          </p>
+          <EmptyState
+            title="No savings logged yet"
+            description="Move funds using the form above."
+          />
         ) : (
           <div className="divide-y divide-ledgerBorder/40 overflow-y-auto max-h-[350px] pr-1 scrollbar-thin">
             {savings.map((tx) => {

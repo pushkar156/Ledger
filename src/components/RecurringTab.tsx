@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import type { RecurringTransaction } from '../types';
 import { CATEGORIES, CATEGORY_LIST } from '../constants/categories';
 import { Repeat, Plus, Trash2, CalendarDays, Clipboard, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { CategoryIcon } from './ui/CategoryIcon';
+import { EmptyState } from './ui/EmptyState';
 
 interface RecurringTabProps {
   recurring: RecurringTransaction[];
@@ -224,20 +226,18 @@ export const RecurringTab: React.FC<RecurringTabProps> = ({
         </div>
 
         {recurring.length === 0 ? (
-          <p className="text-xs text-ledgerMuted text-center py-6">
-            No recurring transactions configured yet. Setup a rule above.
-          </p>
+          <EmptyState
+            title="No recurring transactions configured yet"
+            description="Setup a rule above."
+          />
         ) : (
           <div className="divide-y divide-ledgerBorder/40 overflow-y-auto max-h-[350px] pr-1 scrollbar-thin">
             {recurring.map((tx) => {
               const isCredit = tx.type === 'credit';
-              const catInfo = CATEGORIES[tx.category] || CATEGORIES.other;
               return (
                 <div key={tx.id} className="flex justify-between items-center py-3.5 first:pt-0 last:pb-0 group">
                   <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                    <span className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${catInfo.bgClass}`}>
-                      {catInfo.emoji}
-                    </span>
+                    <CategoryIcon category={tx.category} size="sm" />
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-ledgerText truncate">
                         {tx.note}

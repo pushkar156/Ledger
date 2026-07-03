@@ -3,6 +3,8 @@ import type { Expense } from '../types';
 import { Calendar } from '@/components/ui/calendar';
 import { CATEGORIES } from '../constants/categories';
 import { CalendarDays, Sparkles, Trash2 } from 'lucide-react';
+import { CategoryIcon } from './ui/CategoryIcon';
+import { EmptyState } from './ui/EmptyState';
 
 interface CalendarTabProps {
   expenses: Expense[];
@@ -82,9 +84,10 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({ expenses, onDeleteExpe
         </div>
 
         {dayExpenses.length === 0 ? (
-          <p className="text-xs text-ledgerMuted text-center py-8">
-            No transactions logged on this day.
-          </p>
+          <EmptyState
+            title="No transactions logged"
+            description="Nothing spent or credited on this day."
+          />
         ) : (
           <div className="divide-y divide-ledgerBorder/30">
             {dayExpenses.map((tx) => {
@@ -93,9 +96,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({ expenses, onDeleteExpe
               return (
                 <div key={tx.id} className="flex justify-between items-center py-3 first:pt-0 last:pb-0 group">
                   <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                    <span className={`w-6 h-6 rounded flex items-center justify-center text-xs flex-shrink-0 ${catInfo.bgClass}`}>
-                      {catInfo.emoji}
-                    </span>
+                    <CategoryIcon category={tx.category} size="sm" />
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-ledgerText truncate">
                         {tx.note || catInfo.label}

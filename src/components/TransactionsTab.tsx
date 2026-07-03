@@ -1,7 +1,9 @@
 import React from 'react';
 import type { Expense } from '../types';
 import { CATEGORIES } from '../constants/categories';
-import { AlertCircle } from 'lucide-react';
+import { CategoryIcon } from './ui/CategoryIcon';
+import { EmptyState } from './ui/EmptyState';
+import { SwipeableTransactionRow } from './ui/SwipeableTransactionRow';
 import { DeleteLogButton } from '@/components/ui/DeleteLogButton';
 
 interface TransactionsTabProps {
@@ -46,15 +48,10 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
 }) => {
   if (expenses.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-        <div className="w-12 h-12 rounded-full bg-ledgerElevated border border-ledgerBorder flex items-center justify-center text-ledgerMuted mb-4">
-          <AlertCircle className="w-6 h-6 text-ledgerMuted" />
-        </div>
-        <h3 className="text-sm font-medium text-ledgerText mb-1">No expenses yet</h3>
-        <p className="text-xs text-ledgerMuted max-w-[240px]">
-          Tap "+ Add expense" below to log your first transaction.
-        </p>
-      </div>
+      <EmptyState
+        title="No expenses yet"
+        description="Tap '+ Add expense' below to log your first transaction."
+      />
     );
   }
 
@@ -101,46 +98,44 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
             {group.expenses.map((expense) => {
               const categoryInfo = CATEGORIES[expense.category] || CATEGORIES.other;
               return (
-                <div
+                <SwipeableTransactionRow
                   key={expense.id}
-                  className="flex items-center justify-between p-3.5 group hover:bg-ledgerElevated/30 transition-colors relative"
-                  style={{ borderLeft: `3px solid ${categoryInfo.hex}` }}
+                  onDelete={() => onDeleteExpense(expense.id)}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Category Tinted Chip */}
-                    <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${categoryInfo.bgClass}`}
-                    >
-                      <span className="text-lg leading-none">{categoryInfo.emoji}</span>
-                    </div>
+                  <div
+                    className="flex items-center justify-between p-3.5 group hover:bg-ledgerElevated/30 transition-colors relative w-full"
+                    style={{ borderLeft: `3px solid ${categoryInfo.hex}` }}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {/* Category Icon */}
+                      <CategoryIcon category={expense.category} size="md" />
 
-                    {/* Category Label and Optional Note */}
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-ledgerText leading-tight">
-                        {categoryInfo.label}
-                      </p>
-                      {expense.note && (
-                        <p className="text-xs text-ledgerMuted truncate mt-0.5 max-w-[200px]">
-                          {expense.note}
+                      {/* Category Label and Optional Note */}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-ledgerText leading-tight">
+                          {categoryInfo.label}
                         </p>
-                      )}
+                        {expense.note && (
+                          <p className="text-xs text-ledgerMuted truncate mt-0.5 max-w-[200px]">
+                            {expense.note}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right hand Side: Amount */}
+                    <div className="flex items-center gap-3">
+                      <span className={`font-mono text-sm tabular-nums text-right font-medium ${
+                        expense.type === 'credit' ? 'text-ledgerMint' : 'text-ledgerText'
+                      }`}>
+                        {expense.type === 'credit' ? '+' : '−'}₹{Number(expense.amount).toLocaleString('en-IN', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
                     </div>
                   </div>
-
-                  {/* Right hand Side: Amount & Delete */}
-                  <div className="flex items-center gap-3">
-                    <span className={`font-mono text-sm tabular-nums text-right font-medium ${
-                      expense.type === 'credit' ? 'text-ledgerMint' : 'text-ledgerText'
-                    }`}>
-                      {expense.type === 'credit' ? '+' : '−'}₹{Number(expense.amount).toLocaleString('en-IN', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </span>
-
-                    <DeleteLogButton onConfirm={() => onDeleteExpense(expense.id)} />
-                  </div>
-                </div>
+                </SwipeableTransactionRow>
               );
             })}
           </div>

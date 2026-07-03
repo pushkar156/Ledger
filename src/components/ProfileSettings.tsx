@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { User, Mail, Lock, CheckCircle, AlertCircle, Camera } from 'lucide-react';
+import { ThemeToggle } from './ui/ThemeToggle';
 
 interface ProfileSettingsProps {
   session: any;
@@ -124,6 +125,19 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
   return (
     <div className="space-y-6 pb-28 animate-fade-in">
+      {/* Theme Toggle Card */}
+      <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex justify-between items-center">
+        <div>
+          <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
+            Appearance
+          </h3>
+          <p className="text-[11px] text-ledgerText font-medium mt-0.5">
+            Switch between light and dark themes
+          </p>
+        </div>
+        <ThemeToggle />
+      </div>
+
       {/* Profile Details Card */}
       <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
         <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
@@ -275,14 +289,6 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
             Password updated successfully.
           </p>
         )}
-      </div>
-
-      {/* Session Action Card */}
-      <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
-        <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
-          Session
-        </h3>
-  {/* Logout button removed */}
       </div>
 
       {validationError && (

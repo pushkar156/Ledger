@@ -13,6 +13,7 @@ import { CalendarTab } from './components/CalendarTab';
 import { ProfileSettings } from './components/ProfileSettings';
 import { RecurringTab } from './components/RecurringTab';
 import Dock from './components/Dock';
+import { AnimatedNumber } from './components/ui/AnimatedNumber';
 import {
   Plus,
   CheckCircle,
@@ -1185,7 +1186,7 @@ function App() {
                 {activeRange.isCustom ? 'Active Period Balance' : 'Monthly Balance'}
               </span>
               <h1 className={`text-3xl font-mono tracking-tight font-bold tabular-nums mt-0.5 ${isBalanceNegative ? 'text-ledgerCoral' : 'text-[#7FE7C4]'}`}>
-                ₹{currentBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹<AnimatedNumber value={currentBalance} precision={2} />
               </h1>
             </div>
             

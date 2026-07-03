@@ -1,4 +1,5 @@
 import React from 'react';
+import { AnimatedNumber } from './ui/AnimatedNumber';
 
 interface BudgetBarProps {
   spent: number;
@@ -62,12 +63,12 @@ export const BudgetBar: React.FC<BudgetBarProps> = ({
             <span className="font-mono flex flex-col sm:flex-row sm:items-center gap-1">
               <span>
                 Balance: <span className={isBalanceNegative ? 'text-ledgerCoral font-semibold' : 'text-[#7FE7C4] font-semibold'}>
-                  ₹{remainingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ₹<AnimatedNumber value={remainingBalance} precision={2} />
                 </span>
               </span>
               {!isBalanceNegative && (
                 <span className="text-[10px] opacity-80 sm:before:content-['•'] sm:before:mx-1 sm:before:text-ledgerMuted">
-                  ₹{dailyBudget.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/day ({remainingDays}d left)
+                  ₹<AnimatedNumber value={dailyBudget} precision={2} />/day ({remainingDays}d left)
                 </span>
               )}
             </span>
@@ -75,7 +76,7 @@ export const BudgetBar: React.FC<BudgetBarProps> = ({
               {activeRange.label}
             </span>
             <span className={`font-mono font-medium ${isOverBudget ? 'text-ledgerCoral' : 'text-ledgerMint'}`}>
-              {percentage.toFixed(0)}% used
+              <AnimatedNumber value={percentage} precision={0} />% used
             </span>
           </div>
         </div>
