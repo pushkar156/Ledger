@@ -193,7 +193,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         {/* Category Icon */}
-                        <CategoryIcon category={expense.category} size="md" />
+                        <CategoryIcon category={expense.category} className="w-4 h-4 text-ledgerMuted" />
 
                         {/* Category Label and Optional Note */}
                         <div className="min-w-0">

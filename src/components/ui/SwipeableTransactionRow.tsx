@@ -1,6 +1,5 @@
 import React from 'react';
 import { useSwipeable } from 'react-swipeable';
-import { DeleteLogButton } from './DeleteLogButton';
 
 /**
  * Wraps a transaction row element to add swipe‑to‑delete functionality.
@@ -17,7 +16,7 @@ export const SwipeableTransactionRow: React.FC<{
         onDelete();
       }
     },
-    preventDefaultTouchmoveEvent: true,
+    preventScrollOnSwipe: true,
     trackMouse: true,
   });
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, CircleCheck, Folder, ShoppingCart, CreditCard, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { CircleCheck, Folder, ShoppingCart, CreditCard, DollarSign, TrendingUp, HelpCircle } from 'lucide-react';
 
 /**
  * Maps a transaction category string to an illustrative icon.
@@ -19,7 +19,7 @@ export const CategoryIcon: React.FC<{ category: string; className?: string }> = 
     transfer: <CircleCheck className={className} />,
   };
 
-  const fallback = <Icon name="circle" className={className} />; // generic circle
+  const fallback = <HelpCircle className={className} />; // generic question circle
   return <>{icons[category.toLowerCase()] ?? fallback}</>;
 };
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { RecurringTransaction } from '../types';
-import { CATEGORIES, CATEGORY_LIST } from '../constants/categories';
+import { CATEGORY_LIST } from '../constants/categories';
 import { Repeat, Plus, Trash2, CalendarDays, Clipboard, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { CategoryIcon } from './ui/CategoryIcon';
 import { EmptyState } from './ui/EmptyState';
@@ -237,7 +237,7 @@ export const RecurringTab: React.FC<RecurringTabProps> = ({
               return (
                 <div key={tx.id} className="flex justify-between items-center py-3.5 first:pt-0 last:pb-0 group">
                   <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                    <CategoryIcon category={tx.category} size="sm" />
+                    <CategoryIcon category={tx.category} className="w-3.5 h-3.5 text-ledgerMuted" />
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-ledgerText truncate">
                         {tx.note}
