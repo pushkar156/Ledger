@@ -53,23 +53,11 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       <div className="w-full max-w-[400px] bg-ledgerSurface border border-ledgerBorder rounded-xl p-8 shadow-2xl">
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-ledgerMint/10 text-ledgerMint mb-3 border border-ledgerMint/20">
-            {/* Minimalist ledger book SVG logo */}
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-              />
-            </svg>
-          </div>
+          <img 
+            src="/favicon.png" 
+            alt="Ledger Logo" 
+            className="inline-block w-14 h-14 rounded-2xl shadow-lg border border-ledgerBorder/45 mb-3"
+          />
           <h1 className="text-2xl font-bold tracking-tight text-ledgerText">Ledger</h1>
           <p className="text-sm text-ledgerMuted mt-1">Calm, precise expense tracking</p>
         </div>

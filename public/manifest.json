@@ -3,8 +3,8 @@
   "name": "Ledger — Personal Finance Tracker",
   "icons": [
     {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
+      "src": "/favicon.png",
+      "type": "image/png",
       "sizes": "512x512",
       "purpose": "any maskable"
     }
