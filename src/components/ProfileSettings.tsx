@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, Mail, Lock, CheckCircle, AlertCircle, Camera } from 'lucide-react';
+import { User, Mail, Lock, CheckCircle, AlertCircle, Camera, Smartphone } from 'lucide-react';
 import { ThemeToggle } from './ui/ThemeToggle';
 
 interface ProfileSettingsProps {
@@ -8,6 +8,9 @@ interface ProfileSettingsProps {
   isOfflineMode: boolean;
   onSignOut: () => Promise<void>;
   showToast: (msg: string) => void;
+  isAppInstalled: boolean;
+  deferredPrompt: any;
+  onInstallApp: () => Promise<void>;
 }
 
 // 4 Pre-seeded premium avatar emoji presets for instant visual selection
@@ -17,6 +20,9 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   session,
   isOfflineMode,
   showToast,
+  isAppInstalled,
+  deferredPrompt,
+  onInstallApp,
 }) => {
   const [fullName, setFullName] = useState('');
   const [avatarEmoji, setAvatarEmoji] = useState('📊');
@@ -290,6 +296,25 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           </p>
         )}
       </div>
+
+      {/* PWA App Installation Control Card */}
+      {!isAppInstalled && deferredPrompt && (
+        <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
+          <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider flex items-center gap-1.5">
+            <Smartphone className="w-4 h-4 text-ledgerMint" />
+            Install Application
+          </h3>
+          <p className="text-xs text-ledgerMuted leading-normal">
+            Install this ledger app on your desktop or mobile device for native full-screen view and quick access.
+          </p>
+          <button
+            onClick={onInstallApp}
+            className="w-full bg-ledgerMint text-[#0F1B1E] font-semibold py-2.5 rounded-lg text-xs hover:bg-ledgerMint/90 active:scale-[0.98] transition flex items-center justify-center gap-1.5"
+          >
+            Install App Launcher
+          </button>
+        </div>
+      )}
 
       {validationError && (
         <p className="text-xs text-ledgerCoral mt-2 flex items-center gap-1.5 justify-center animate-fade-in bg-ledgerCoral/5 border border-ledgerCoral/10 py-2.5 rounded-lg">

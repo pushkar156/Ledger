@@ -1,14 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ledgerBg: #0F1B1E;
-  --color-ledgerSurface: #16262A;
-  --color-ledgerElevated: #1C2E32;
-  --color-ledgerBorder: rgba(234,242,240,0.08);
-  --color-ledgerText: #EAF2F0;
-  --color-ledgerMuted: #8FA8A3;
-  --color-ledgerMint: #7FE7C4;
-  --color-ledgerCoral: #E8615A;
+  --color-ledgerBg: var(--color-bg);
+  --color-ledgerSurface: var(--color-surface);
+  --color-ledgerElevated: var(--color-elevated);
+  --color-ledgerBorder: var(--color-border);
+  --color-ledgerText: var(--color-text);
+  --color-ledgerMuted: var(--color-muted);
+  --color-ledgerMint: var(--color-accent); /* Dynamic accent color */
+  --color-ledgerGreen: #10B981;
+  --color-ledgerCoral: #EF4444;
   
   /* Category colors */
   --color-catAmber: #E8A94C;
@@ -17,11 +18,33 @@
   --color-catSand: #F2D06B;
   --color-catSage: #6FD1A0;
   --color-catGrey: #9AA8A5;
-  --color-catMint: #7FE7C4;
-  --color-catCoral: #E8615A;
+  --color-catMint: var(--color-accent);
+  --color-catCoral: #EF4444;
 
   --font-sans: -apple-system, "Segoe UI", Inter, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Roboto Mono", monospace;
+}
+
+:root {
+  /* Light Mode values */
+  --color-bg: #F4F6F8;
+  --color-surface: #FFFFFF;
+  --color-elevated: #E4E7EB;
+  --color-border: rgba(15, 27, 30, 0.08);
+  --color-text: #1F2937;
+  --color-muted: #6B7280;
+  --color-accent: #8B5CF6; /* Purple accent for light mode */
+}
+
+html.dark {
+  /* Dark Mode values */
+  --color-bg: #0E0B16;
+  --color-surface: #18122B;
+  --color-elevated: #211936;
+  --color-border: rgba(234, 242, 240, 0.06);
+  --color-text: #EAF2F0;
+  --color-muted: #8A81A8;
+  --color-accent: #EAF2F0; /* Off-white/slate-black accent for dark mode */
 }
 
 @utility tabular-nums {
@@ -30,14 +53,15 @@
 
 @layer base {
   body {
-    background-color: #0F1B1E;
-    color: #EAF2F0;
+    background-color: var(--color-bg);
+    color: var(--color-text);
     font-family: -apple-system, "Segoe UI", Inter, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
     padding: 0;
     overflow-x: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 
@@ -47,14 +71,14 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0F1B1E;
+  background: #0E0B16;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1C2E32;
+  background: #211936;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #7FE7C4;
+  background: #A78BFA;
 }
 
 /* Slide up animation for Bottom Sheet */
@@ -88,6 +112,6 @@
 /* Set up standard input styles */
 input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: #7FE7C4 !important;
-  box-shadow: 0 0 0 1px rgba(127, 231, 196, 0.2);
+  border-color: #A78BFA !important;
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.2);
 }

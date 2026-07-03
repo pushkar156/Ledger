@@ -96,8 +96,8 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
             Total Deposited
           </span>
           <div className="mt-2 flex items-baseline gap-1">
-            <ArrowDownLeft className="w-3.5 h-3.5 text-ledgerMint flex-shrink-0" />
-            <span className="text-lg font-mono font-bold text-ledgerMint truncate tabular-nums">
+            <ArrowDownLeft className="w-3.5 h-3.5 text-ledgerGreen flex-shrink-0" />
+            <span className="text-lg font-mono font-bold text-ledgerGreen truncate tabular-nums">
               ₹<AnimatedNumber value={totalDeposited} precision={2} />
             </span>
           </div>
@@ -120,7 +120,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
             <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
               Net Savings Balance
             </span>
-            <div className={`text-2xl font-mono font-bold tabular-nums mt-1 ${isBalanceNegative ? 'text-ledgerCoral' : 'text-ledgerMint'}`}>
+            <div className={`text-2xl font-mono font-bold tabular-nums mt-1 ${isBalanceNegative ? 'text-ledgerCoral' : 'text-ledgerGreen'}`}>
               {showBalance ? (
                 <>
                   ₹<AnimatedNumber value={savingsBalance} precision={2} />
@@ -135,7 +135,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
             className={`p-3 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
               isBalanceNegative
                 ? 'bg-ledgerCoral/5 text-ledgerCoral border border-ledgerCoral/10 hover:bg-ledgerCoral/10'
-                : 'bg-ledgerMint/5 text-ledgerMint border border-ledgerMint/10 hover:bg-ledgerMint/10'
+                : 'bg-ledgerGreen/5 text-ledgerGreen border border-ledgerGreen/10 hover:bg-ledgerGreen/10'
             }`}
             title={showBalance ? "Hide balance" : "Show balance"}
           >
@@ -295,7 +295,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
                   </div>
                   
                   <div className="flex items-center gap-2.5 flex-shrink-0">
-                    <span className={`font-mono text-xs font-bold tabular-nums ${isDeposit ? 'text-ledgerMint' : 'text-ledgerCoral'}`}>
+                    <span className={`font-mono text-xs font-bold tabular-nums ${isDeposit ? 'text-ledgerGreen' : 'text-ledgerCoral'}`}>
                       {isDeposit ? '+' : '−'}₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                     

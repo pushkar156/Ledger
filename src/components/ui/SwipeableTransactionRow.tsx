@@ -13,8 +13,7 @@ export const SwipeableTransactionRow: React.FC<{
 }> = ({ onDelete, children }) => {
   const handlers = useSwipeable({
     onSwipedLeft: (eventData) => {
-      // Simple threshold check – could be refined
-      if (eventData.absX > 80) {
+      if (eventData.absX > 100) {
         onDelete();
       }
     },
@@ -23,13 +22,8 @@ export const SwipeableTransactionRow: React.FC<{
   });
 
   return (
-    <div {...handlers} className="relative">
-      {/* The row content */}
+    <div {...handlers} className="relative overflow-hidden">
       {children}
-      {/* Overlay delete button that appears on swipe – simplified */}
-      <div className="absolute inset-y-0 right-0 flex items-center pr-2">
-        <DeleteLogButton onConfirm={onDelete} />
-      </div>
     </div>
   );
 };

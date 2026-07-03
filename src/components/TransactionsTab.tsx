@@ -144,7 +144,6 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
             onSelect={(date) => {
               if (date) {
                 setSelectedDate(formatDateToYYYYMMDD(date));
-                setShowFullCalendar(false); // Snap back to list view on select
               }
             }}
             className="text-ledgerText"
@@ -174,7 +173,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
             {/* Day Group Header */}
             <div className="flex justify-between items-center px-1 text-xs text-ledgerMuted uppercase tracking-wider font-semibold">
               <span>{formatGroupDate(group.date)}</span>
-              <span className={`font-mono text-right ${group.subtotal < 0 ? 'text-ledgerMint font-medium' : 'text-ledgerMuted'}`}>
+              <span className={`font-mono text-right ${group.subtotal < 0 ? 'text-ledgerGreen font-medium' : 'text-ledgerMuted'}`}>
                 {group.subtotal < 0 ? '+' : ''}₹{Math.abs(group.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
@@ -212,7 +211,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                       {/* Right hand Side: Amount */}
                       <div className="flex items-center gap-3">
                         <span className={`font-mono text-sm tabular-nums text-right font-medium ${
-                          expense.type === 'credit' ? 'text-ledgerMint' : 'text-ledgerText'
+                          expense.type === 'credit' ? 'text-ledgerGreen' : 'text-ledgerCoral'
                         }`}>
                           {expense.type === 'credit' ? '+' : '−'}₹{Number(expense.amount).toLocaleString('en-IN', {
                             minimumFractionDigits: 2,

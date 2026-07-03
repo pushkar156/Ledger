@@ -1,0 +1,17 @@
+{
+  "short_name": "Ledger",
+  "name": "Ledger — Personal Finance Tracker",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0E0B16",
+  "theme_color": "#0E0B16",
+  "display": "standalone",
+  "orientation": "portrait"
+}

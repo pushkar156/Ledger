@@ -62,7 +62,7 @@ export const BudgetBar: React.FC<BudgetBarProps> = ({
           <div className="flex justify-between items-center text-xs text-ledgerMuted">
             <span className="font-mono flex flex-col sm:flex-row sm:items-center gap-1">
               <span>
-                Balance: <span className={isBalanceNegative ? 'text-ledgerCoral font-semibold' : 'text-[#7FE7C4] font-semibold'}>
+                Balance: <span className={isBalanceNegative ? 'text-ledgerCoral font-semibold' : 'text-ledgerGreen font-semibold'}>
                   ₹<AnimatedNumber value={remainingBalance} precision={2} />
                 </span>
               </span>

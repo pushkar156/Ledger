@@ -191,6 +191,51 @@ function App() {
   const [showCarryOverPrompt, setShowCarryOverPrompt] = useState(false);
   const [previousMonthBudget, setPreviousMonthBudget] = useState<number | null>(null);
   
+  // PWA install states
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(() => {
+    // Check if running inside standalone app wrapper mode
+    return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+  });
+
+  // Listener to capture PWA installation prompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      // Only display the banner to new users/first logs if not already installed
+      if (!isAppInstalled) {
+        setShowInstallBanner(true);
+      }
+    };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setShowInstallBanner(false);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, [isAppInstalled]);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsAppInstalled(true);
+      setShowInstallBanner(false);
+    }
+    setDeferredPrompt(null);
+  };
+  
   // Tab states
   const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'calendar' | 'recurring' | 'settings'>('expenses');
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
@@ -1183,7 +1228,7 @@ function App() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted select-none">
                 {activeRange.isCustom ? 'Active Period Balance' : 'Monthly Balance'}
               </span>
-              <h1 className={`text-3xl font-mono tracking-tight font-bold tabular-nums mt-0.5 ${isBalanceNegative ? 'text-ledgerCoral' : 'text-[#7FE7C4]'}`}>
+              <h1 className={`text-3xl font-mono tracking-tight font-bold tabular-nums mt-0.5 ${isBalanceNegative ? 'text-ledgerCoral' : 'text-ledgerGreen'}`}>
                 ₹<AnimatedNumber value={currentBalance} precision={2} />
               </h1>
             </div>
@@ -1208,6 +1253,39 @@ function App() {
             onSetBudgetClick={() => setIsBudgetEditorOpen(true)}
           />
         </header>
+
+        {/* PWA Install Notification Banner */}
+        {showInstallBanner && !isAppInstalled && deferredPrompt && (
+          <div className="mx-5 mt-4 p-4 bg-ledgerSurface border border-ledgerMint/20 rounded-xl flex flex-col space-y-3 animate-slide-up shadow-lg">
+            <div className="flex items-start gap-2.5">
+              <div className="p-2 bg-ledgerMint/10 text-ledgerMint rounded-lg">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs font-semibold text-ledgerText flex items-center gap-1.5">
+                  Install Ledger App
+                </h4>
+                <p className="text-[11px] text-ledgerMuted mt-0.5 leading-normal">
+                  Install this tracker on your home screen for quick offline access and immersive full-screen tracking.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2.5">
+              <button
+                onClick={handleInstallApp}
+                className="flex-1 bg-ledgerMint text-[#0F1B1E] font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition hover:bg-ledgerMint/90 active:scale-[0.98]"
+              >
+                Install Now
+              </button>
+              <button
+                onClick={() => setShowInstallBanner(false)}
+                className="flex-1 bg-ledgerElevated border border-ledgerBorder text-ledgerMuted font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg transition hover:text-ledgerText"
+              >
+                Maybe Later
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Carry Over Last Month's Budget Prompt Card */}
         {showCarryOverPrompt && previousMonthBudget !== null && (
@@ -1323,6 +1401,9 @@ function App() {
               isOfflineMode={isOfflineMode}
               onSignOut={handleSignOut}
               showToast={(msg) => showToast(msg)}
+              isAppInstalled={isAppInstalled}
+              deferredPrompt={deferredPrompt}
+              onInstallApp={handleInstallApp}
             />
           )}
         </main>

@@ -167,11 +167,11 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
     })
     .sort((a, b) => b.value - a.value);
 
-  // 2. Calculations: 14-day daily spending trend (Debits Only)
+  // 2. Calculations: 7-day daily spending trend (Debits Only)
   const trendData = [];
   const today = new Date();
   
-  for (let i = 13; i >= 0; i--) {
+  for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(today.getDate() - i);
     const year = d.getFullYear();
@@ -502,12 +502,11 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                 </div>
               )}
             </div>
-
-            {/* 3. 14-day Trend Chart */}
+            {/* 3. 7-day Trend Chart */}
             <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg">
               <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider mb-4 flex items-center gap-1.5">
                 <TrendingUp className="w-4 h-4 text-ledgerMint" />
-                14-Day Trend
+                7-Day Trend
               </h3>
               
               <div className="h-[180px] w-full mt-2 pr-2">
@@ -517,12 +516,12 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                       dataKey="label"
                       axisLine={false}
                       tickLine={false}
-                      tick={{ fill: '#8FA8A3', fontSize: 9 }}
+                      tick={{ fill: 'var(--color-ledgerMuted)', fontSize: 9 }}
                     />
                     <Tooltip content={<CustomBarTooltip />} cursor={{ fill: 'rgba(234,242,240,0.02)' }} />
                     <Bar
                       dataKey="amount"
-                      fill="#7FE7C4"
+                      fill="var(--color-ledgerMint)"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={20}
                     />
@@ -557,11 +556,11 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                   <div className={`p-3.5 rounded-lg border flex flex-col justify-between ${
                     insights.isProjectedOver 
                       ? 'bg-ledgerCoral/5 border-ledgerCoral/20 text-ledgerCoral'
-                      : 'bg-ledgerMint/5 border-ledgerMint/20 text-[#7FE7C4]'
+                      : 'bg-ledgerGreen/5 border-ledgerGreen/20 text-ledgerGreen'
                   }`}>
                     <div>
                       <h4 className="font-semibold mb-1 flex items-center gap-1.5 text-ledgerText">
-                        <AlertCircle className={`w-3.5 h-3.5 ${insights.isProjectedOver ? 'text-ledgerCoral' : 'text-ledgerMint'}`} />
+                        <AlertCircle className={`w-3.5 h-3.5 ${insights.isProjectedOver ? 'text-ledgerCoral' : 'text-ledgerGreen'}`} />
                         Budget Projection
                       </h4>
                       <p className="leading-normal">
@@ -571,7 +570,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                           </>
                         ) : (
                           <>
-                            Looking good! Projected to finish under budget by <span className="font-mono text-ledgerMint font-bold">₹{insights.projectedDifference.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>.
+                            Looking good! Projected to finish under budget by <span className="font-mono text-ledgerGreen font-bold">₹{insights.projectedDifference.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>.
                           </>
                         )}
                       </p>
@@ -606,7 +605,7 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                         ) : (
                           <>
                             Weekly spend is {insights.wowDirection === 'up' ? 'up' : 'down'} by{' '}
-                            <span className={`font-bold ${insights.wowDirection === 'up' ? 'text-ledgerCoral' : 'text-ledgerMint'}`}>
+                            <span className={`font-bold ${insights.wowDirection === 'up' ? 'text-ledgerCoral' : 'text-ledgerGreen'}`}>
                               {insights.wowPercentage.toFixed(0)}%
                             </span>{' '}
                             compared to the previous 7 days.
