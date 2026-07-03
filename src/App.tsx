@@ -9,7 +9,6 @@ import { AddExpenseSheet } from './components/AddExpenseSheet';
 import { ConfigureBudgetSheet } from './components/ConfigureBudgetSheet';
 import { SavingsTab } from './components/SavingsTab';
 import { PeriodLogsTab } from './components/PeriodLogsTab';
-import { CalendarTab } from './components/CalendarTab';
 import { ProfileSettings } from './components/ProfileSettings';
 import { RecurringTab } from './components/RecurringTab';
 import Dock from './components/Dock';
@@ -25,7 +24,6 @@ import {
   PiggyBank,
   History,
   Settings,
-  Calendar as CalendarIcon,
   SlidersHorizontal,
   PieChart,
   Repeat,
@@ -1288,6 +1286,7 @@ function App() {
                 <TransactionsTab
                   expenses={activePeriodExpenses}
                   onDeleteExpense={handleDeleteExpense}
+                  activeRange={activeRange}
                 />
               </div>
             </div>
@@ -1308,10 +1307,6 @@ function App() {
               onDeleteExpense={handleDeleteExpense}
               onDeleteBudget={handleDeleteBudget}
             />
-          )}
-
-          {activeTab === 'calendar' && (
-            <CalendarTab expenses={expenses} onDeleteExpense={handleDeleteExpense} />
           )}
 
           {activeTab === 'recurring' && (
@@ -1347,46 +1342,40 @@ function App() {
           </div>
         )}
 
-        {/* Sticky Dock Navigation Bar (5 Items: Expenses, Savings, Logs, Calendar, Settings) */}
+        {/* Sticky Dock Navigation Bar (5 Items: Expenses, Savings, Logs, Auto-Bill, Settings) */}
         <div className="fixed bottom-4 left-0 right-0 pointer-events-none flex justify-center z-40">
           <div className="w-full max-w-[480px] px-6 pointer-events-auto flex justify-center">
             <Dock
               items={[
                 {
-                  icon: <CreditCard className="w-4 h-4 text-ledgerMint" />,
+                  icon: <CreditCard className="w-4 h-4 text-[#6FA8DC]" />,
                   label: 'Expenses',
                   onClick: () => setActiveTab('expenses'),
-                  className: activeTab === 'expenses' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                  className: activeTab === 'expenses' ? 'border-[#6FA8DC] bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
                 },
                 {
-                  icon: <PiggyBank className="w-4 h-4 text-ledgerMint" />,
+                  icon: <PiggyBank className="w-4 h-4 text-[#F2D06B]" />,
                   label: 'Savings',
                   onClick: () => setActiveTab('savings'),
-                  className: activeTab === 'savings' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                  className: activeTab === 'savings' ? 'border-[#F2D06B] bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
                 },
                 {
-                  icon: <History className="w-4 h-4 text-ledgerMint" />,
+                  icon: <History className="w-4 h-4 text-[#C792EA]" />,
                   label: 'Logs',
                   onClick: () => setActiveTab('logs'),
-                  className: activeTab === 'logs' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                  className: activeTab === 'logs' ? 'border-[#C792EA] bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
                 },
                 {
-                  icon: <CalendarIcon className="w-4 h-4 text-ledgerMint" />,
-                  label: 'Calendar',
-                  onClick: () => setActiveTab('calendar'),
-                  className: activeTab === 'calendar' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
-                },
-                {
-                  icon: <Repeat className="w-4 h-4 text-ledgerMint" />,
+                  icon: <Repeat className="w-4 h-4 text-[#E8A94C]" />,
                   label: 'Auto-Bill',
                   onClick: () => setActiveTab('recurring'),
-                  className: activeTab === 'recurring' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                  className: activeTab === 'recurring' ? 'border-[#E8A94C] bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
                 },
                 {
-                  icon: <Settings className="w-4 h-4 text-ledgerMint" />,
+                  icon: <Settings className="w-4 h-4 text-[#8FA8A3]" />,
                   label: 'Settings',
                   onClick: () => setActiveTab('settings'),
-                  className: activeTab === 'settings' ? 'border-ledgerMint bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
+                  className: activeTab === 'settings' ? 'border-[#8FA8A3] bg-ledgerElevated' : 'border-neutral-800 bg-ledgerSurface'
                 }
               ]}
               panelHeight={52}
