@@ -8,11 +8,13 @@ interface AuthProps {
 
 export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,7 +23,14 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     setError(null);
 
     try {
-      if (isSignUp) {
+      if (isForgotPassword) {
+        if (!email.trim()) throw new Error('Please enter your email address.');
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: 'https://ledger-expense.vercel.app/',
+        });
+        if (resetError) throw resetError;
+        setError('Password reset link sent! Check your email inbox.');
+      } else if (isSignUp) {
         if (!fullName.trim()) {
           throw new Error('Please enter your full name.');
         }
@@ -57,6 +66,27 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       setError(err.message || 'An error occurred during authentication.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (!email) {
+      setError('Please fill in your email address first.');
+      return;
+    }
+    setResending(true);
+    setError(null);
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+      });
+      if (resendError) throw resendError;
+      setError('Verification email resent! Please check your inbox.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to resend verification email.');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -112,38 +142,75 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-ledgerMuted mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ledgerMuted" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 text-sm transition focus:border-ledgerMint focus:ring-1 focus:ring-ledgerMint"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+          {!isForgotPassword && (
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-ledgerMuted">
+                  Password
+                </label>
+                {!isSignUp && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsForgotPassword(true);
+                      setError(null);
+                    }}
+                    className="text-[11px] text-ledgerMint hover:underline transition"
+                  >
+                    Forgot Password?
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ledgerMuted" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required={!isForgotPassword}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 text-sm transition focus:border-ledgerMint focus:ring-1 focus:ring-ledgerMint"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Error Message */}
+           {/* Error Message */}
           {error && (
-            <div className={`p-3 rounded-lg text-xs leading-relaxed border ${
-              error.includes('Verification email')
-                ? 'bg-ledgerMint/10 border-ledgerMint/20 text-ledgerMint'
-                : 'bg-ledgerCoral/10 border-ledgerCoral/20 text-ledgerCoral'
-            }`}>
-              {error}
+            <div className="flex flex-col gap-2">
+              <div className={`p-3 rounded-lg text-xs leading-relaxed border ${
+                error.includes('Verification email') || error.includes('reset link sent')
+                  ? 'bg-ledgerMint/10 border-ledgerMint/20 text-ledgerMint'
+                  : 'bg-ledgerCoral/10 border-ledgerCoral/20 text-ledgerCoral'
+              }`}>
+                {error}
+              </div>
+              
+              {/* Resend Verification Action Trigger */}
+              {isSignUp && error.includes('Verification email') && (
+                <button
+                  type="button"
+                  disabled={resending}
+                  onClick={handleResendEmail}
+                  className="text-left text-[11px] font-bold text-ledgerMint hover:underline pl-1 flex items-center gap-1.5 active:scale-[0.98] transition disabled:opacity-50"
+                >
+                  {resending ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Resending Email...
+                    </>
+                  ) : (
+                    'Resend Verification Email'
+                  )}
+                </button>
+              )}
             </div>
           )}
 
@@ -155,24 +222,36 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              isSignUp ? 'Create Account' : 'Sign In'
+              isForgotPassword ? 'Send Reset Link' : isSignUp ? 'Create Account' : 'Sign In'
             )}
           </button>
         </form>
 
         {/* Toggle link */}
-        <div className="text-center mt-6">
-          <button
-            onClick={() => {
-              setIsSignUp(!isSignUp);
-              setError(null);
-            }}
-            className="text-xs text-ledgerMuted hover:text-ledgerText transition underline underline-offset-4"
-          >
-            {isSignUp
-              ? 'Already have an account? Sign in'
-              : "Don't have an account? Sign up"}
-          </button>
+        <div className="text-center mt-6 flex flex-col gap-2">
+          {isForgotPassword ? (
+            <button
+              onClick={() => {
+                setIsForgotPassword(false);
+                setError(null);
+              }}
+              className="text-xs text-ledgerMuted hover:text-ledgerText transition underline underline-offset-4"
+            >
+              Back to Sign In
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setError(null);
+              }}
+              className="text-xs text-ledgerMuted hover:text-ledgerText transition underline underline-offset-4"
+            >
+              {isSignUp
+                ? 'Already have an account? Sign in'
+                : "Don't have an account? Sign up"}
+            </button>
+          )}
         </div>
       </div>
     </div>

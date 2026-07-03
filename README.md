@@ -2,7 +2,7 @@
 
 Ledger is a calm, precise, and lightning-fast Progressive Web App (PWA) designed to monitor daily spending, track recurring subscriptions, and manage savings balances on a clean, modern interface.
 
-You can try the live application here: **[https://ledger-daily.vercel.app/](https://ledger-daily.vercel.app/)**
+You can try the live application here: **[https://ledger-expense.vercel.app/](https://ledger-expense.vercel.app/)**
 
 It is built with React, Vite, Tailwind CSS, Framer Motion, and includes seamless integration with Supabase for real-time cloud sync, alongside a fully functioning local sandbox fallback.
 
