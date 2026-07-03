@@ -40,6 +40,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
   const [date, setDate] = useState(getLocalDateString());
   const [saving, setSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showBalance, setShowBalance] = useState(true);
 
   // 1. Calculations
   const totalDeposited = savings
@@ -92,7 +93,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
             Total Deposited
           </span>
           <div className="mt-2 flex items-baseline gap-1">
-            <ArrowUpRight className="w-3.5 h-3.5 text-ledgerMint flex-shrink-0" />
+            <ArrowDownLeft className="w-3.5 h-3.5 text-ledgerMint flex-shrink-0" />
             <span className="text-lg font-mono font-bold text-ledgerMint truncate tabular-nums">
               ₹{totalDeposited.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </span>
@@ -104,7 +105,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
             Total Withdrawn
           </span>
           <div className="mt-2 flex items-baseline gap-1">
-            <ArrowDownLeft className="w-3.5 h-3.5 text-ledgerCoral flex-shrink-0" />
+            <ArrowUpRight className="w-3.5 h-3.5 text-ledgerCoral flex-shrink-0" />
             <span className="text-lg font-mono font-bold text-ledgerCoral truncate tabular-nums">
               ₹{totalWithdrawn.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </span>
@@ -117,12 +118,20 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
               Net Savings Balance
             </span>
             <p className={`text-2xl font-mono font-bold tabular-nums mt-1 ${isBalanceNegative ? 'text-ledgerCoral' : 'text-ledgerMint'}`}>
-              ₹{savingsBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              {showBalance ? `₹${savingsBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '₹ ••••••'}
             </p>
           </div>
-          <div className={`p-3 rounded-full ${isBalanceNegative ? 'bg-ledgerCoral/5 text-ledgerCoral border border-ledgerCoral/10' : 'bg-ledgerMint/5 text-ledgerMint border border-ledgerMint/10'}`}>
+          <button
+            onClick={() => setShowBalance(!showBalance)}
+            className={`p-3 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
+              isBalanceNegative
+                ? 'bg-ledgerCoral/5 text-ledgerCoral border border-ledgerCoral/10 hover:bg-ledgerCoral/10'
+                : 'bg-ledgerMint/5 text-ledgerMint border border-ledgerMint/10 hover:bg-ledgerMint/10'
+            }`}
+            title={showBalance ? "Hide balance" : "Show balance"}
+          >
             <PiggyBank className="w-6 h-6" />
-          </div>
+          </button>
         </div>
       </div>
 
@@ -136,6 +145,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
 
         {/* Toggle Option Selector */}
         <div className="flex bg-ledgerElevated border border-ledgerBorder rounded-lg p-0.5">
+          {/* Deposit button first */}
           <button
             type="button"
             onClick={() => setType('incoming')}
@@ -145,9 +155,10 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
                 : 'text-ledgerMuted hover:text-ledgerText'
             }`}
           >
-            <ArrowUpRight className="w-3.5 h-3.5 text-ledgerMint" />
+            <ArrowDownLeft className="w-3.5 h-3.5 text-ledgerMint" />
             Deposit
           </button>
+          {/* Withdraw button second */}
           <button
             type="button"
             onClick={() => setType('outgoing')}
@@ -157,7 +168,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
                 : 'text-ledgerMuted hover:text-ledgerText'
             }`}
           >
-            <ArrowDownLeft className="w-3.5 h-3.5 text-ledgerCoral" />
+            <ArrowUpRight className="w-3.5 h-3.5 text-ledgerCoral" />
             Withdraw
           </button>
         </div>

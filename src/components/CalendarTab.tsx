@@ -59,7 +59,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({ expenses, onDeleteExpe
             onSelect={setSelectedDate}
             className="text-ledgerText"
             expenses={expenses}
-            numberOfMonths={2}
+            numberOfMonths={1}
             showOutsideDays={false}
           />
         </div>
@@ -104,7 +104,7 @@ export const CalendarTab: React.FC<CalendarTabProps> = ({ expenses, onDeleteExpe
                   </div>
 
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`font-mono text-xs font-semibold tabular-nums ${isCredit ? 'text-ledgerMint' : 'text-ledgerText'}`}>
+                    <span className={`font-mono text-xs font-semibold tabular-nums ${isCredit ? 'text-ledgerMint' : 'text-ledgerCoral'}`}>
                       {isCredit ? '+' : '−'}₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                     <button

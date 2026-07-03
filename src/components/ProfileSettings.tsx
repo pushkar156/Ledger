@@ -283,13 +283,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
           Session
         </h3>
-        <button
-          onClick={onSignOut}
-          className="w-full bg-ledgerCoral/10 hover:bg-ledgerCoral/20 border border-ledgerCoral/20 text-ledgerCoral font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5 active:scale-[0.98]"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          Sign Out of Ledger
-        </button>
+  {/* Logout button removed */}
       </div>
 
       {validationError && (

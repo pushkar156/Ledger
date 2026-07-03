@@ -684,6 +684,28 @@ function App() {
     }
   };
 
+  // Delete Budget Configuration Callback
+  const handleDeleteBudget = async (id: string) => {
+    const remaining = allBudgets.filter((b) => b.id !== id);
+    setAllBudgets(remaining);
+
+    try {
+      if (isOfflineMode) {
+        localStorage.setItem('ledger_budgets_history', JSON.stringify(remaining));
+        showToast('Budget period deleted.');
+      } else {
+        const { error } = await supabase.from('budgets').delete().eq('id', id);
+        if (error) throw error;
+        showToast('Budget period deleted.');
+      }
+    } catch (err) {
+      console.error('Error deleting budget period:', err);
+      showToast('Could not delete budget period.');
+      // Re-fetch data on failure to restore state
+      fetchData();
+    }
+  };
+
   // Save Budget Configuration (Supporting monthly & custom types)
   // Save Budget Configuration (Supporting monthly & custom types)
   const handleSaveBudget = async (data: {
@@ -1087,6 +1109,7 @@ function App() {
               expenses={expenses}
               allBudgets={allBudgets}
               onDeleteExpense={handleDeleteExpense}
+              onDeleteBudget={handleDeleteBudget}
             />
           )}
 

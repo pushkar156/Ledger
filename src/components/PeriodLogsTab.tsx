@@ -1,12 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import type { Expense, Budget } from '../types';
 import { CATEGORIES } from '../constants/categories';
-import { ChevronDown, ChevronUp, Trash2, CalendarDays } from 'lucide-react';
+import { ChevronDown, ChevronUp, CalendarDays, Trash2 } from 'lucide-react';
+import { DeleteLogButton } from '@/components/ui/DeleteLogButton';
+import { ConfirmationModal } from '@/components/ui/ConfirmationModal';
 
 interface PeriodLogsTabProps {
   expenses: Expense[];
   allBudgets: Budget[];
   onDeleteExpense: (id: string) => Promise<void>;
+  onDeleteBudget: (id: string) => Promise<void>;
 }
 
 // Helper to format date to short text
@@ -29,9 +32,11 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
   expenses,
   allBudgets,
   onDeleteExpense,
+  onDeleteBudget,
 }) => {
   // Store expanded period budget IDs in local state
   const [expandedPeriodIds, setExpandedPeriodIds] = useState<Record<string, boolean>>({});
+  const [deletingBudgetId, setDeletingBudgetId] = useState<string | null>(null);
 
   const toggleExpand = (id: string) => {
     setExpandedPeriodIds((prev) => ({
@@ -173,8 +178,21 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
                       </span>
                     </div>
 
-                    <div className="text-ledgerMuted p-1 bg-ledgerElevated/50 rounded-lg">
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingBudgetId(period.id);
+                        }}
+                        className="text-ledgerMuted hover:text-ledgerCoral opacity-40 hover:opacity-100 transition-all p-1.5 rounded hover:bg-ledgerCoral/10"
+                        title="Delete budget period"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <div className="text-ledgerMuted p-1 bg-ledgerElevated/50 rounded-lg">
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -197,7 +215,7 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
                       </p>
                     ) : (
                       <div className="divide-y divide-ledgerBorder/30 max-h-[260px] overflow-y-auto pr-1 scrollbar-thin">
-                        {period.transactions.map((tx) => {
+                        {period.transactions.slice(0, 5).map((tx) => {
                           const isCredit = tx.type === 'credit';
                           const catInfo = CATEGORIES[tx.category] || CATEGORIES.other;
 
@@ -221,14 +239,7 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
                                 <span className={`font-mono text-xs font-semibold tabular-nums ${isCredit ? 'text-ledgerMint' : 'text-ledgerText'}`}>
                                   {isCredit ? '+' : '−'}₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </span>
-                                
-                                <button
-                                  onClick={() => onDeleteExpense(tx.id)}
-                                  className="text-ledgerMuted hover:text-ledgerCoral p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Delete transaction"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                <DeleteLogButton onConfirm={() => onDeleteExpense(tx.id)} />
                               </div>
                             </div>
                           );
@@ -242,6 +253,19 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
           })}
         </div>
       )}
+
+      <ConfirmationModal
+        open={deletingBudgetId !== null}
+        title="Delete budget period"
+        message="Are you sure you want to delete this budget period? The transactions linked to this date range will not be deleted."
+        onConfirm={async () => {
+          if (deletingBudgetId) {
+            await onDeleteBudget(deletingBudgetId);
+            setDeletingBudgetId(null);
+          }
+        }}
+        onCancel={() => setDeletingBudgetId(null)}
+      />
     </div>
   );
 };

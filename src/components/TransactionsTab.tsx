@@ -1,7 +1,8 @@
 import React from 'react';
 import type { Expense } from '../types';
 import { CATEGORIES } from '../constants/categories';
-import { Trash2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
+import { DeleteLogButton } from '@/components/ui/DeleteLogButton';
 
 interface TransactionsTabProps {
   expenses: Expense[];
@@ -137,13 +138,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                       })}
                     </span>
 
-                    <button
-                      onClick={() => onDeleteExpense(expense.id)}
-                      className="text-ledgerMuted hover:text-ledgerCoral opacity-20 hover:opacity-100 transition-all p-1.5 rounded hover:bg-ledgerCoral/10"
-                      aria-label="Delete expense"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <DeleteLogButton onConfirm={() => onDeleteExpense(expense.id)} />
                   </div>
                 </div>
               );
