@@ -7,6 +7,7 @@ interface ProfileSettingsProps {
   session: any;
   isOfflineMode: boolean;
   onSignOut: () => Promise<void>;
+  onSignIn: () => void;
   showToast: (msg: string) => void;
   isAppInstalled: boolean;
   deferredPrompt: any;
@@ -24,6 +25,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   deferredPrompt,
   onInstallApp,
   onSignOut,
+  onSignIn,
 }) => {
   const [fullName, setFullName] = useState('');
   const [avatarEmoji, setAvatarEmoji] = useState('📊');
@@ -263,106 +265,108 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       </div>
 
       {/* Password Reset Card */}
-      <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
-        <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
-          Change Password
-        </h3>
+      {session && !isOfflineMode && (
+        <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
+          <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
+            Change Password
+          </h3>
 
-        <form onSubmit={triggerPasswordConfirm} className="space-y-3.5">
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
-              Current Password
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-ledgerMuted">
-                <Lock className="w-4 h-4" />
-              </span>
-              <input
-                type={showOldPassword ? 'text' : 'password'}
-                required
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 font-sans text-xs transition"
-              />
-              <button
-                type="button"
-                onClick={() => setShowOldPassword(!showOldPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
-              >
-                {showOldPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+          <form onSubmit={triggerPasswordConfirm} className="space-y-3.5">
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
+                Current Password
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-ledgerMuted">
+                  <Lock className="w-4 h-4" />
+                </span>
+                <input
+                  type={showOldPassword ? 'text' : 'password'}
+                  required
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 font-sans text-xs transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowOldPassword(!showOldPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
+                >
+                  {showOldPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
-              New Password
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-ledgerMuted">
-                <Lock className="w-4 h-4" />
-              </span>
-              <input
-                type={showNewPassword ? 'text' : 'password'}
-                required
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 font-sans text-xs transition"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword(!showNewPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
-              >
-                {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
+                New Password
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-ledgerMuted">
+                  <Lock className="w-4 h-4" />
+                </span>
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 font-sans text-xs transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-1">
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
-              Confirm New Password
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-ledgerMuted">
-                <Lock className="w-4 h-4" />
-              </span>
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 font-sans text-xs transition"
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
-              >
-                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-ledgerMuted px-1">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-ledgerMuted">
+                  <Lock className="w-4 h-4" />
+                </span>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 font-sans text-xs transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={savingPassword}
-            className="w-full bg-ledgerElevated hover:bg-ledgerElevated/80 border border-ledgerBorder text-ledgerText font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5"
-          >
-            {savingPassword ? 'Updating Password...' : 'Update Account Password'}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={savingPassword}
+              className="w-full bg-ledgerElevated hover:bg-ledgerElevated/80 border border-ledgerBorder text-ledgerText font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5"
+            >
+              {savingPassword ? 'Updating Password...' : 'Update Account Password'}
+            </button>
+          </form>
 
-        {passwordSuccess && (
-          <p className="text-xs text-ledgerMint mt-1 flex items-center gap-1.5 justify-center animate-fade-in">
-            <CheckCircle className="w-3.5 h-3.5" />
-            Password updated successfully.
-          </p>
-        )}
-      </div>
+          {passwordSuccess && (
+            <p className="text-xs text-ledgerMint mt-1 flex items-center gap-1.5 justify-center animate-fade-in">
+              <CheckCircle className="w-3.5 h-3.5" />
+              Password updated successfully.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       {showConfirmModal && (
@@ -407,18 +411,28 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         </div>
       )}
 
-      {/* Account Control Actions - Sign Out */}
+      {/* Account Control Actions - Sign Out / Sign In */}
       <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
         <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
           Account Actions
         </h3>
-        <button
-          onClick={onSignOut}
-          className="w-full bg-ledgerCoral/10 hover:bg-ledgerCoral/20 border border-ledgerCoral/20 text-ledgerCoral font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          Sign Out of Account
-        </button>
+        {session ? (
+          <button
+            onClick={onSignOut}
+            className="w-full bg-ledgerCoral/10 hover:bg-ledgerCoral/20 border border-ledgerCoral/20 text-ledgerCoral font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-1.5"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sign Out of Account
+          </button>
+        ) : (
+          <button
+            onClick={onSignIn}
+            className="w-full bg-ledgerMint text-[#0F1B1E] font-semibold py-2.5 rounded-lg text-xs hover:bg-ledgerMint/90 active:scale-[0.98] transition flex items-center justify-center gap-1.5"
+          >
+            <User className="w-3.5 h-3.5" />
+            Sign In / Register Cloud Sync
+          </button>
+        )}
       </div>
 
       {validationError && (

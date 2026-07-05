@@ -13,6 +13,7 @@ import { ProfileSettings } from './components/ProfileSettings';
 import { RecurringTab } from './components/RecurringTab';
 import Dock from './components/Dock';
 import { AnimatedNumber } from './components/ui/AnimatedNumber';
+import { ThemeToggle } from './components/ui/ThemeToggle';
 import {
   Plus,
   CheckCircle,
@@ -280,16 +281,38 @@ function App() {
       }
       setLoading(false);
     } else {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
+      // With Supabase credentials present: check for active user session or default to local guest mode
+      supabase.auth.getSession().then(({ data: { session: activeSession } }) => {
+        if (activeSession) {
+          setSession(activeSession);
+          // If we have local unsynced expenses, trigger migration to Supabase on startup
+          const localUnsynced = localStorage.getItem('ledger_expenses_local_guest');
+          if (localUnsynced) {
+            migrateLocalGuestData(activeSession.user.id, JSON.parse(localUnsynced));
+          }
+        } else {
+          // No active account session -> Start in local sandbox guest mode (default homepage)
+          setSession(null);
+        }
         setAuthChecked(true);
         setLoading(false);
       });
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setSession(session);
-        if (session) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
+        setSession(activeSession);
+        if (activeSession) {
+          // Migrate local guest data upon login
+          const localUnsynced = localStorage.getItem('ledger_expenses_local_guest');
+          if (localUnsynced) {
+            migrateLocalGuestData(activeSession.user.id, JSON.parse(localUnsynced));
+          }
           fetchData();
+        } else {
+          // Clear active user states but preserve guest caches
+          setExpenses([]);
+          setAllBudgets([]);
+          setSavings([]);
+          setRecurring([]);
         }
       });
 
@@ -298,6 +321,31 @@ function App() {
       };
     }
   }, [isOfflineMode]);
+
+  // Migrate local guest caches to Supabase cloud storage on login
+  const migrateLocalGuestData = async (userId: string, guestExpenses: Expense[]) => {
+    if (guestExpenses.length === 0) return;
+    try {
+      console.log('Migrating local guest expenses to Supabase for user:', userId);
+      const rowsToInsert = guestExpenses.map(e => ({
+        user_id: userId,
+        amount: Number(e.amount),
+        category: e.category,
+        note: e.note,
+        date: e.date,
+        type: e.type || 'debit'
+      }));
+
+      const { error } = await supabase.from('expenses').insert(rowsToInsert);
+      if (error) throw error;
+      
+      // Clear guest storage on success
+      localStorage.removeItem('ledger_expenses_local_guest');
+      showToast(`Successfully synced ${guestExpenses.length} local expenses to your cloud profile!`);
+    } catch (err) {
+      console.error('Failed migrating local guest data:', err);
+    }
+  };
 
   // Clean up duplicate or overlapping budget configurations that have 0 transactions
   const cleanupDuplicateBudgets = useCallback(async (budgetsList: Budget[], expensesList: Expense[]) => {
@@ -382,7 +430,23 @@ function App() {
 
   // Fetch Data (Expenses, Budgets, Savings, and Recurring)
   const fetchData = useCallback(async () => {
-    if (!session?.user) return;
+    // If no active session, parse from local storage guest key cache
+    if (!session?.user) {
+      setLoading(true);
+      const localGuestEx = localStorage.getItem('ledger_expenses_local_guest');
+      const localGuestBg = localStorage.getItem('ledger_budgets_history_local_guest');
+      
+      const parsedExpenses: Expense[] = localGuestEx ? JSON.parse(localGuestEx) : [];
+      setExpenses(parsedExpenses);
+      
+      const parsedBudgets: Budget[] = localGuestBg ? JSON.parse(localGuestBg) : [];
+      setAllBudgets(parsedBudgets);
+      
+      setSavings([]);
+      setRecurring([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
 
     const currentMonthStr = new Date().toISOString().substring(0, 7); // "YYYY-MM"
@@ -659,10 +723,8 @@ function App() {
 
   // Add Expense/Credit Callback
   const handleSaveExpense = async (data: { amount: number; category: string; note: string; date: string; type: 'debit' | 'credit' }) => {
-    if (!session?.user) return;
-
     const newExpense = {
-      user_id: session.user.id,
+      user_id: session?.user?.id || 'guest-user',
       amount: data.amount,
       category: data.category,
       note: data.note || null,
@@ -671,7 +733,7 @@ function App() {
     };
 
     try {
-      if (isOfflineMode) {
+      if (isOfflineMode || !session?.user) {
         const currentExpenses = [...expenses];
         const savedExpense = {
           ...newExpense,
@@ -680,7 +742,10 @@ function App() {
         } as Expense;
         const updated = [savedExpense, ...currentExpenses].sort((a, b) => b.date.localeCompare(a.date));
         setExpenses(updated);
-        localStorage.setItem('ledger_expenses', JSON.stringify(updated));
+        localStorage.setItem(
+          session?.user ? 'ledger_expenses' : 'ledger_expenses_local_guest',
+          JSON.stringify(updated)
+        );
         showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
       } else {
         const { error } = await supabase.from('expenses').insert([newExpense]);
@@ -699,11 +764,14 @@ function App() {
     if (!backup) return;
 
     try {
-      if (isOfflineMode) {
+      if (isOfflineMode || !session?.user) {
         const current = expenses.filter((e) => e.id !== backup.id);
         const updated = [backup, ...current].sort((a, b) => b.date.localeCompare(a.date));
         setExpenses(updated);
-        localStorage.setItem('ledger_expenses', JSON.stringify(updated));
+        localStorage.setItem(
+          session?.user ? 'ledger_expenses' : 'ledger_expenses_local_guest',
+          JSON.stringify(updated)
+        );
         showToast('Transaction restored.');
       } else {
         const { error } = await supabase.from('expenses').insert([{
@@ -740,8 +808,11 @@ function App() {
     setExpenses(filtered);
 
     try {
-      if (isOfflineMode) {
-        localStorage.setItem('ledger_expenses', JSON.stringify(filtered));
+      if (isOfflineMode || !session?.user) {
+        localStorage.setItem(
+          session?.user ? 'ledger_expenses' : 'ledger_expenses_local_guest',
+          JSON.stringify(filtered)
+        );
         showToast('Transaction deleted', 'Undo', handleUndoDelete);
       } else {
         const { error } = await supabase.from('expenses').delete().eq('id', id);
@@ -761,8 +832,11 @@ function App() {
     setAllBudgets(remaining);
 
     try {
-      if (isOfflineMode) {
-        localStorage.setItem('ledger_budgets_history', JSON.stringify(remaining));
+      if (isOfflineMode || !session?.user) {
+        localStorage.setItem(
+          session?.user ? 'ledger_budgets_history' : 'ledger_budgets_history_local_guest',
+          JSON.stringify(remaining)
+        );
         showToast('Budget period deleted.');
       } else {
         const { error } = await supabase.from('budgets').delete().eq('id', id);
@@ -772,11 +846,9 @@ function App() {
     } catch (err) {
       console.error('Error deleting budget period:', err);
       showToast('Could not delete budget period.');
-      // Re-fetch data on failure to restore state
       fetchData();
     }
   };
-
   // Heuristics Auto-Bill Recurring Scheduler Trigger Callback
   const checkAndTriggerRecurring = useCallback(async (currentExpenses: Expense[], currentRecurring: RecurringTransaction[]) => {
     if (!session?.user || currentRecurring.length === 0) return;
@@ -1018,9 +1090,10 @@ function App() {
     // If there are empty overlapping budgets, delete them first
     if (budgetsToDelete.length > 0) {
       try {
-        if (isOfflineMode) {
+        if (isOfflineMode || !session?.user) {
+          const storageKey = session?.user ? 'ledger_budgets_history' : 'ledger_budgets_history_local_guest';
           const remaining = allBudgets.filter((b) => !b.id || !budgetsToDelete.includes(b.id));
-          localStorage.setItem('ledger_budgets_history', JSON.stringify(remaining));
+          localStorage.setItem(storageKey, JSON.stringify(remaining));
           setAllBudgets(remaining);
         } else {
           await supabase.from('budgets').delete().in('id', budgetsToDelete);
@@ -1031,7 +1104,7 @@ function App() {
     }
 
     const newBudget: Partial<Budget> = {
-      user_id: session.user.id,
+      user_id: session?.user?.id || 'guest-user',
       type: data.type,
       monthly: data.monthly,
       category_limits: {},
@@ -1045,8 +1118,9 @@ function App() {
     }
 
     try {
-      if (isOfflineMode) {
-        const localBgHistory = localStorage.getItem('ledger_budgets_history');
+      if (isOfflineMode || !session?.user) {
+        const storageKey = session?.user ? 'ledger_budgets_history' : 'ledger_budgets_history_local_guest';
+        const localBgHistory = localStorage.getItem(storageKey);
         let budgetsList: Budget[] = localBgHistory ? JSON.parse(localBgHistory) : [];
         
         // Remove currently active budget if we are replacing it
@@ -1070,7 +1144,7 @@ function App() {
         } as Budget;
 
         budgetsList.push(newLocalBudget);
-        localStorage.setItem('ledger_budgets_history', JSON.stringify(budgetsList));
+        localStorage.setItem(storageKey, JSON.stringify(budgetsList));
         setAllBudgets(budgetsList);
         setShowCarryOverPrompt(false);
         showToast('Budget configured successfully.');
@@ -1200,10 +1274,12 @@ function App() {
     );
   }
 
-  // If no auth/session, show Auth login/signup screen
-  if (!session) {
-    return <Auth onAuthSuccess={fetchData} />;
-  }
+  // If no auth/session, allow browsing homepage in local guest mode.
+  // Auth screen is displayed dynamically when trying to access restricted tabs or via settings.
+  const handleSignIn = () => {
+    setActiveTab('settings');
+    setAuthChecked(true);
+  };
 
   // Net Remaining Balance = Budget - Spent + Credited
   const currentBalance = budget - currentRangeTotals.spent + currentRangeTotals.credited;
@@ -1372,11 +1448,25 @@ function App() {
           )}
 
           {activeTab === 'savings' && (
-            <SavingsTab
-              savings={savings}
-              onAddSavings={handleAddSavings}
-              onDeleteSavings={handleDeleteSavings}
-            />
+            session ? (
+              <SavingsTab
+                savings={savings}
+                onAddSavings={handleAddSavings}
+                onDeleteSavings={handleDeleteSavings}
+              />
+            ) : (
+              <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-8 shadow-lg text-center flex flex-col items-center justify-center space-y-4">
+                <PiggyBank className="w-12 h-12 text-[#F2D06B] animate-bounce" />
+                <h3 className="text-sm font-bold text-ledgerText uppercase tracking-wider">Savings features require Cloud Sync</h3>
+                <p className="text-xs text-ledgerMuted leading-relaxed max-w-[280px]">Sign in or register a free account to track target savings and balance deposits.</p>
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="bg-ledgerMint text-[#0F1B1E] font-semibold py-2.5 px-6 rounded-lg text-xs hover:bg-ledgerMint/90 active:scale-95 transition"
+                >
+                  Sign In / Register
+                </button>
+              </div>
+            )
           )}
 
           {activeTab === 'logs' && (
@@ -1389,23 +1479,67 @@ function App() {
           )}
 
           {activeTab === 'recurring' && (
-            <RecurringTab
-              recurring={recurring}
-              onAddRecurring={handleAddRecurring}
-              onDeleteRecurring={handleDeleteRecurring}
-            />
+            session ? (
+              <RecurringTab
+                recurring={recurring}
+                onAddRecurring={handleAddRecurring}
+                onDeleteRecurring={handleDeleteRecurring}
+              />
+            ) : (
+              <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-8 shadow-lg text-center flex flex-col items-center justify-center space-y-4">
+                <Repeat className="w-12 h-12 text-[#E8A94C] animate-bounce" />
+                <h3 className="text-sm font-bold text-ledgerText uppercase tracking-wider">Auto-Bill requires Cloud Sync</h3>
+                <p className="text-xs text-ledgerMuted leading-relaxed max-w-[280px]">Enable auto-bill schedules and automated recurring subscription logs by logging in.</p>
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="bg-ledgerMint text-[#0F1B1E] font-semibold py-2.5 px-6 rounded-lg text-xs hover:bg-ledgerMint/90 active:scale-95 transition"
+                >
+                  Sign In / Register
+                </button>
+              </div>
+            )
           )}
 
           {activeTab === 'settings' && (
-            <ProfileSettings
-              session={session}
-              isOfflineMode={isOfflineMode}
-              onSignOut={handleSignOut}
-              showToast={(msg) => showToast(msg)}
-              isAppInstalled={isAppInstalled}
-              deferredPrompt={deferredPrompt}
-              onInstallApp={handleInstallApp}
-            />
+            session ? (
+              <ProfileSettings
+                session={session}
+                isOfflineMode={isOfflineMode}
+                onSignOut={handleSignOut}
+                onSignIn={handleSignIn}
+                showToast={(msg) => showToast(msg)}
+                isAppInstalled={isAppInstalled}
+                deferredPrompt={deferredPrompt}
+                onInstallApp={handleInstallApp}
+              />
+            ) : (
+              <div className="space-y-6">
+                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex justify-between items-center">
+                  <div>
+                    <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">Appearance</h3>
+                    <p className="text-[11px] text-ledgerText font-medium mt-0.5">Switch between light and dark themes</p>
+                  </div>
+                  <div className="flex items-center">
+                    <ThemeToggle />
+                  </div>
+                </div>
+
+                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-6 shadow-lg flex flex-col space-y-5">
+                  <div className="text-center">
+                    <img 
+                      src="/favicon.png" 
+                      alt="Ledger Logo" 
+                      className="inline-block w-12 h-12 rounded-xl shadow-lg border border-ledgerBorder/45 mb-3"
+                    />
+                    <h3 className="text-sm font-bold text-ledgerText uppercase tracking-wider">Sync Your Data</h3>
+                    <p className="text-xs text-ledgerMuted mt-1 max-w-[260px] mx-auto leading-relaxed">
+                      You are browsing as a Local Guest. Sign in or register to sync your expenses online.
+                    </p>
+                  </div>
+                  <Auth onAuthSuccess={fetchData} />
+                </div>
+              </div>
+            )
           )}
         </main>
 
