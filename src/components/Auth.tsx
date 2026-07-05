@@ -12,7 +12,9 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,14 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         if (!fullName.trim()) {
           throw new Error('Please enter your full name.');
         }
+        
+        if (password.length < 6) {
+          throw new Error('Password must be at least 6 characters.');
+        }
+
+        if (password !== confirmPassword) {
+          throw new Error('Passwords do not match.');
+        }
 
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
@@ -48,10 +58,16 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         
         if (signUpError) throw signUpError;
         
-        // Supabase sometimes requires email verification, check if user is created but session is null
-        if (data.user && !data.session) {
-          setError('Verification email sent! Please check your inbox.');
-        } else if (data.session) {
+        // Directly sign in the user if auto-confirm is enabled, otherwise log them in
+        if (data.session) {
+          onAuthSuccess();
+        } else {
+          // Fallback check: attempt sign in immediately to bypass manual confirmation
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+          if (signInError) throw signInError;
           onAuthSuccess();
         }
       } else {
@@ -143,42 +159,70 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           </div>
 
           {!isForgotPassword && (
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-ledgerMuted">
-                  Password
-                </label>
-                {!isSignUp && (
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-ledgerMuted">
+                    Password
+                  </label>
+                  {!isSignUp && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgotPassword(true);
+                        setError(null);
+                      }}
+                      className="text-[11px] text-ledgerMint hover:underline transition"
+                    >
+                      Forgot Password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ledgerMuted" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required={!isForgotPassword}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 text-sm transition focus:border-ledgerMint focus:ring-1 focus:ring-ledgerMint"
+                  />
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsForgotPassword(true);
-                      setError(null);
-                    }}
-                    className="text-[11px] text-ledgerMint hover:underline transition"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
                   >
-                    Forgot Password?
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
-                )}
+                </div>
               </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ledgerMuted" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required={!isForgotPassword}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 text-sm transition focus:border-ledgerMint focus:ring-1 focus:ring-ledgerMint"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+
+              {isSignUp && (
+                <div className="animate-slide-up">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-ledgerMuted mb-2">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-ledgerMuted" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required={isSignUp}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-2.5 pl-10 pr-10 text-sm transition focus:border-ledgerMint focus:ring-1 focus:ring-ledgerMint"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-ledgerMuted hover:text-ledgerText p-1 rounded"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
