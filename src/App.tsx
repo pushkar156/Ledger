@@ -1513,30 +1513,29 @@ function App() {
                 onInstallApp={handleInstallApp}
               />
             ) : (
-              <div className="space-y-6">
-                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex justify-between items-center">
-                  <div>
-                    <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">Appearance</h3>
-                    <p className="text-[11px] text-ledgerText font-medium mt-0.5">Switch between light and dark themes</p>
+              <div className="space-y-4">
+                {/* Clean settings top card layout */}
+                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-4 shadow-md flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <img 
+                      src="/favicon.png" 
+                      alt="Ledger Logo" 
+                      className="w-10 h-10 rounded-xl shadow border border-ledgerBorder/45"
+                    />
+                    <div>
+                      <h3 className="text-xs font-bold text-ledgerText uppercase tracking-wider">Sync Profile</h3>
+                      <p className="text-[10px] text-ledgerMuted leading-relaxed">Browsing as Local Guest</p>
+                    </div>
                   </div>
-                  <div className="flex items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-ledgerMuted font-medium">Dark Mode:</span>
                     <ThemeToggle />
                   </div>
                 </div>
 
-                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-6 shadow-lg flex flex-col space-y-5">
-                  <div className="text-center">
-                    <img 
-                      src="/favicon.png" 
-                      alt="Ledger Logo" 
-                      className="inline-block w-12 h-12 rounded-xl shadow-lg border border-ledgerBorder/45 mb-3"
-                    />
-                    <h3 className="text-sm font-bold text-ledgerText uppercase tracking-wider">Sync Your Data</h3>
-                    <p className="text-xs text-ledgerMuted mt-1 max-w-[260px] mx-auto leading-relaxed">
-                      You are browsing as a Local Guest. Sign in or register to sync your expenses online.
-                    </p>
-                  </div>
-                  <Auth onAuthSuccess={fetchData} />
+                {/* Login & signup compact form block */}
+                <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-md">
+                  <Auth onAuthSuccess={fetchData} hideHeader={true} />
                 </div>
               </div>
             )
