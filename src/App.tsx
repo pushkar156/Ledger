@@ -290,6 +290,9 @@ function App() {
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Track the date the user is currently viewing in the Transactions tab calendar strip
+  const [viewingDate, setViewingDate] = useState<string>('');
+
   // Undo Toast State
   const [toast, setToast] = useState<{ message: string; actionLabel?: string; onAction?: () => void } | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
@@ -1603,6 +1606,7 @@ function App() {
                     setIsAddSheetOpen(true);
                   }}
                   activeRange={activeRange}
+                  onDateChange={setViewingDate}
                 />
               </div>
             </div>
@@ -1799,6 +1803,7 @@ function App() {
         {isAddSheetOpen && (
           <AddExpenseSheet
             editingExpense={editingExpense}
+            defaultDate={viewingDate}
             onClose={() => {
               setIsAddSheetOpen(false);
               setEditingExpense(null);

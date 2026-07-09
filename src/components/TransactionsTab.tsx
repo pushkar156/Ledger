@@ -13,6 +13,7 @@ interface TransactionsTabProps {
   onDeleteExpense: (id: string) => void;
   onEditExpense: (expense: Expense) => void;
   activeRange: { startDate: string; endDate: string };
+  onDateChange?: (date: string) => void;
 }
 
 // Utility to parse local date cleanly
@@ -68,8 +69,23 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   onDeleteExpense,
   onEditExpense,
   activeRange,
+  onDateChange,
 }) => {
-  const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString());
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const today = getLocalDateString();
+    onDateChange?.(today);
+    return today;
+  });
+
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date);
+    // Notify parent of the date the user is currently viewing
+    if (date && date !== 'DEFAULT_TODAY_STUB') {
+      onDateChange?.(date);
+    } else if (date === '' || date === 'DEFAULT_TODAY_STUB') {
+      onDateChange?.(getLocalDateString());
+    }
+  };
   const [showFullCalendar, setShowFullCalendar] = useState<boolean>(false);
 
   // Filter based on strip selection (if selectedDate is empty string, show all)
@@ -151,7 +167,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
             selected={selectedDate ? parseLocalDate(selectedDate) : undefined}
             onSelect={(date) => {
               if (date) {
-                setSelectedDate(formatDateToYYYYMMDD(date));
+                handleDateChange(formatDateToYYYYMMDD(date));
               }
             }}
             className="text-ledgerText"
@@ -164,7 +180,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
         /* Calendar horizontal strip filter */
         <CalendarStrip
           selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
+          onSelectDate={handleDateChange}
           expenses={expenses}
           activeRange={activeRange}
         />

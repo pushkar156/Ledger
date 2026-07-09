@@ -7,6 +7,7 @@ interface AddExpenseSheetProps {
   onClose: () => void;
   onSave: (data: { amount: number; category: string; note: string; date: string; type: 'debit' | 'credit' }) => Promise<void>;
   editingExpense?: Expense | null;
+  defaultDate?: string;
 }
 
 // Utility to get local date in YYYY-MM-DD
@@ -18,11 +19,11 @@ const getLocalDateString = (): string => {
   return `${year}-${month}-${day}`;
 };
 
-export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSave, editingExpense = null }) => {
+export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSave, editingExpense = null, defaultDate }) => {
   const [amount, setAmount] = useState(editingExpense ? String(editingExpense.amount) : '');
   const [selectedCategory, setSelectedCategory] = useState<string>(editingExpense ? editingExpense.category : 'food');
   const [note, setNote] = useState(editingExpense ? (editingExpense.note || '') : '');
-  const [date, setDate] = useState(editingExpense ? editingExpense.date : getLocalDateString());
+  const [date, setDate] = useState(editingExpense ? editingExpense.date : (defaultDate || getLocalDateString()));
   const [type, setType] = useState<'debit' | 'credit'>(editingExpense ? (editingExpense.type as 'debit' | 'credit') : 'debit');
   const [submitting, setSubmitting] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
