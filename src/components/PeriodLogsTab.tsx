@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import type { Expense, Budget } from '../types';
 import { CATEGORIES } from '../constants/categories';
-import { ChevronDown, ChevronUp, CalendarDays, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, CalendarDays, Trash2, Download, Upload } from 'lucide-react';
 import { DeleteLogButton } from '@/components/ui/DeleteLogButton';
 import { ConfirmationModal } from '@/components/ui/ConfirmationModal';
 
@@ -10,6 +10,13 @@ interface PeriodLogsTabProps {
   allBudgets: Budget[];
   onDeleteExpense: (id: string) => Promise<void>;
   onDeleteBudget: (id: string) => Promise<void>;
+  onImportExpenses: (imported: Array<{
+    amount: number;
+    category: string;
+    note: string;
+    date: string;
+    type: 'debit' | 'credit';
+  }>) => Promise<void>;
 }
 
 // Helper to format date to short text
@@ -33,16 +40,138 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
   allBudgets,
   onDeleteExpense,
   onDeleteBudget,
+  onImportExpenses,
 }) => {
   // Store expanded period budget IDs in local state
   const [expandedPeriodIds, setExpandedPeriodIds] = useState<Record<string, boolean>>({});
   const [deletingBudgetId, setDeletingBudgetId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const toggleExpand = (id: string) => {
     setExpandedPeriodIds((prev) => ({
       ...prev,
       [id]: !prev[id],
     }));
+  };
+
+  // Helper to convert array of expenses to CSV file and download it
+  const downloadCSV = (data: Expense[], filename: string) => {
+    // CSV Header row
+    const headers = ['Date', 'Amount', 'Type', 'Category', 'Note'];
+    const rows = data.map((e) => [
+      e.date,
+      e.amount,
+      e.type,
+      e.category,
+      e.note || ''
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Trigger export of all history transactions
+  const exportAllToCSV = () => {
+    if (expenses.length === 0) return;
+    const dateStr = new Date().toISOString().substring(0, 10);
+    downloadCSV(expenses, `ledger_all_expenses_backup_${dateStr}.csv`);
+  };
+
+  // Trigger export of period-specific transactions
+  const exportPeriodToCSV = (period: any) => {
+    if (period.transactions.length === 0) return;
+    const sanitizedLabel = period.label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    downloadCSV(period.transactions, `ledger_expenses_period_${sanitizedLabel}.csv`);
+  };
+
+  // Trigger file browser for CSV upload
+  const triggerCSVImport = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Parse imported CSV file
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      try {
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length <= 1) {
+          alert('CSV file is empty or missing headers.');
+          return;
+        }
+
+        // Header mapping check
+        const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+        const dateIdx = headers.indexOf('date');
+        const amountIdx = headers.indexOf('amount');
+        const typeIdx = headers.indexOf('type');
+        const categoryIdx = headers.indexOf('category');
+        const noteIdx = headers.indexOf('note');
+
+        if (dateIdx === -1 || amountIdx === -1 || typeIdx === -1 || categoryIdx === -1) {
+          alert('Invalid CSV structure. Headers must contain Date, Amount, Type, and Category.');
+          return;
+        }
+
+        const parsedItems: any[] = [];
+        for (let i = 1; i < lines.length; i++) {
+          // Parse CSV values handling quotes correctly
+          const row = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(',');
+          const cleanRow = row.map(val => val.replace(/^"|"$/g, '').trim());
+
+          const dateVal = cleanRow[dateIdx];
+          const amountVal = parseFloat(cleanRow[amountIdx]);
+          const typeVal = cleanRow[typeIdx] as 'debit' | 'credit';
+          const categoryVal = cleanRow[categoryIdx];
+          const noteVal = noteIdx !== -1 ? cleanRow[noteIdx] : '';
+
+          if (dateVal && !isNaN(amountVal) && (typeVal === 'debit' || typeVal === 'credit') && categoryVal) {
+            parsedItems.push({
+              amount: amountVal,
+              category: categoryVal,
+              note: noteVal,
+              date: dateVal,
+              type: typeVal
+            });
+          }
+        }
+
+        if (parsedItems.length > 0) {
+          await onImportExpenses(parsedItems);
+        } else {
+          alert('No valid transaction logs found in the CSV.');
+        }
+      } catch (err) {
+        console.error('Failed to parse CSV:', err);
+        alert('Failed to parse CSV file. Ensure it is formatted correctly.');
+      } finally {
+        // Reset file input value to allow uploading the same file again
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+
+    reader.readAsText(file);
   };
 
   // Compile periods and group transactions matching their dates
@@ -118,10 +247,41 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
 
   return (
     <div className="space-y-4 pb-28 animate-fade-in">
-      <div>
-        <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider pl-1">
+      <div className="flex justify-between items-center px-1">
+        <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
           Historical Budget Periods
         </h3>
+        
+        <div className="flex items-center gap-2">
+          {/* Hidden file input for CSV parsing */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".csv"
+            className="hidden"
+          />
+          
+          <button
+            onClick={triggerCSVImport}
+            className="bg-ledgerElevated hover:bg-ledgerElevated/80 border border-ledgerBorder text-ledgerText font-medium px-2.5 py-1.5 rounded-lg text-[10px] uppercase tracking-wider transition flex items-center gap-1 active:scale-95"
+            title="Import expense logs from a CSV backup file"
+          >
+            <Upload className="w-3.5 h-3.5 text-ledgerMint" />
+            Import
+          </button>
+
+          {expenses.length > 0 && (
+            <button
+              onClick={exportAllToCSV}
+              className="bg-ledgerElevated hover:bg-ledgerElevated/80 border border-ledgerBorder text-ledgerText font-medium px-2.5 py-1.5 rounded-lg text-[10px] uppercase tracking-wider transition flex items-center gap-1 active:scale-95"
+              title="Export all logged transactions as CSV backup"
+            >
+              <Download className="w-3.5 h-3.5 text-ledgerMint" />
+              Export All
+            </button>
+          )}
+        </div>
       </div>
 
       {periodsData.length === 0 ? (
@@ -201,9 +361,23 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
                 {isExpanded && (
                   <div className="border-t border-ledgerBorder bg-ledgerElevated/15 p-4 animate-slide-up space-y-3">
                     <div className="flex justify-between items-center border-b border-ledgerBorder/40 pb-2">
-                      <h5 className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
-                        Transaction History ({period.transactions.length})
-                      </h5>
+                      <div className="flex items-center gap-2">
+                        <h5 className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
+                          Transaction History ({period.transactions.length})
+                        </h5>
+                        {period.transactions.length > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              exportPeriodToCSV(period);
+                            }}
+                            className="text-[9px] text-ledgerMint hover:text-ledgerMint/80 font-bold uppercase tracking-wider border border-ledgerMint/20 hover:border-ledgerMint/40 bg-ledgerMint/5 px-2 py-0.5 rounded transition"
+                            title="Export only this period's logs as CSV"
+                          >
+                            Export CSV
+                          </button>
+                        )}
+                      </div>
                       <span className="text-[9px] text-ledgerMuted font-mono">
                         Budget Limit: ₹{period.limit.toLocaleString('en-IN')}
                       </span>

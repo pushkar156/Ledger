@@ -868,6 +868,77 @@ function App() {
     }
   };
 
+  // CSV Import Callback - supports bulk insert and local/cloud deduplication
+  const handleImportExpenses = async (imported: Array<{
+    amount: number;
+    category: string;
+    note: string;
+    date: string;
+    type: 'debit' | 'credit';
+  }>) => {
+    // 1. Deduplicate against existing local/loaded expenses state
+    // Deduplication key: date_amount_category_note
+    const makeKey = (e: { date: string; amount: number; category: string; note: string | null }) => 
+      `${e.date}_${Number(e.amount).toFixed(2)}_${e.category}_${(e.note || '').trim().toLowerCase()}`;
+
+    const existingKeys = new Set(expenses.map(makeKey));
+    const newItems = imported.filter(item => !existingKeys.has(makeKey(item)));
+
+    if (newItems.length === 0) {
+      showToast('No new transactions to import.');
+      return;
+    }
+
+    try {
+      if (isOfflineMode || !session?.user) {
+        // Offline / Guest bulk migration
+        const formattedNew = newItems.map((item, idx) => ({
+          ...item,
+          id: `local-imported-${Date.now()}-${idx}`,
+          user_id: session?.user?.id || 'guest-user',
+          created_at: new Date().toISOString()
+        })) as Expense[];
+
+        const updated = [...formattedNew, ...expenses].sort((a, b) => b.date.localeCompare(a.date));
+        setExpenses(updated);
+        localStorage.setItem(
+          session?.user ? 'ledger_expenses' : 'ledger_expenses_local_guest',
+          JSON.stringify(updated)
+        );
+        showToast(`Successfully imported ${newItems.length} transactions.`);
+      } else {
+        // Cloud bulk migration
+        const formattedNew = newItems.map(item => ({
+          user_id: session.user.id,
+          amount: item.amount,
+          category: item.category,
+          note: item.note || '',
+          date: item.date,
+          type: item.type
+        }));
+
+        const { error } = await supabase.from('expenses').insert(formattedNew);
+        if (error) throw error;
+
+        // Fetch fresh copy to keep UI synchronized
+        const { data: updatedExpenses } = await supabase
+          .from('expenses')
+          .select('*')
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false });
+
+        if (updatedExpenses) {
+          setExpenses(updatedExpenses);
+        }
+        showToast(`Successfully imported ${newItems.length} transactions.`);
+      }
+    } catch (err) {
+      console.error('Failed to bulk import transactions:', err);
+      showToast('Could not import transactions. Try again.');
+      throw err;
+    }
+  };
+
   // Undo delete callback handler
   const handleUndoDelete = async () => {
     const backup = lastDeletedExpenseRef.current;
@@ -1640,6 +1711,7 @@ function App() {
               allBudgets={allBudgets}
               onDeleteExpense={handleDeleteExpense}
               onDeleteBudget={handleDeleteBudget}
+              onImportExpenses={handleImportExpenses}
             />
           )}
 

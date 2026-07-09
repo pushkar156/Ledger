@@ -475,26 +475,41 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Categorized Legend and Percentages */}
+                  {/* Categorized Legend, Percentages and Relative Footprint Progress Bars */}
                   <div className="space-y-2">
                     {donutData.map((entry) => {
-                      const pct = ((entry.value / scopedTotal) * 100).toFixed(0);
+                      const pctNum = (entry.value / scopedTotal) * 100;
+                      const pct = pctNum.toFixed(0);
+                      
                       return (
-                        <div key={entry.id} className="flex justify-between items-center p-2 rounded-lg bg-ledgerElevated/30 border border-ledgerBorder/40">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className={`w-6 h-6 rounded flex items-center justify-center text-xs ${entry.bgClass}`}>
-                              {entry.emoji}
-                            </span>
-                            <span className="text-xs text-ledgerText font-medium truncate">
-                              {entry.name}
-                            </span>
-                            <span className="text-[10px] text-ledgerMuted font-mono">
-                              {pct}%
+                        <div key={entry.id} className="p-3 rounded-lg bg-ledgerElevated/30 border border-ledgerBorder/40 flex flex-col space-y-2">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={`w-6 h-6 rounded flex items-center justify-center text-xs ${entry.bgClass}`}>
+                                {entry.emoji}
+                              </span>
+                              <span className="text-xs text-ledgerText font-medium truncate">
+                                {entry.name}
+                              </span>
+                              <span className="text-[9px] text-ledgerMuted font-mono bg-ledgerElevated border border-ledgerBorder/60 px-1 rounded">
+                                {pct}% footprint
+                              </span>
+                            </div>
+                            <span className="font-mono text-xs text-ledgerText tabular-nums text-right font-medium">
+                              ₹{entry.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
-                          <span className="font-mono text-xs text-ledgerText tabular-nums text-right font-medium">
-                            ₹{entry.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </span>
+                          
+                          {/* Relative Footprint progress bar indicator */}
+                          <div className="w-full h-1 bg-ledgerElevated rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-500 ease-out"
+                              style={{ 
+                                width: `${pctNum}%`,
+                                backgroundColor: entry.color 
+                              }}
+                            />
+                          </div>
                         </div>
                       );
                     })}
