@@ -910,6 +910,23 @@ function App() {
     // Backup to support instant Undo action
     lastDeletedExpenseRef.current = target;
 
+    // If deleting a transaction that matches a recurring template, keep track of it
+    // so the auto-bill scheduler doesn't instantly auto-recreate it on next check
+    const matchedRule = recurring.find(
+      (r) => r.category === target.category && 
+             Number(r.amount) === Number(target.amount) && 
+             r.note === target.note
+    );
+    if (matchedRule) {
+      const deletedKey = `${target.date}_${matchedRule.id}`;
+      const deletedDatesStr = localStorage.getItem('ledger_deleted_recurring_dates');
+      const deletedDates: string[] = deletedDatesStr ? JSON.parse(deletedDatesStr) : [];
+      if (!deletedDates.includes(deletedKey)) {
+        deletedDates.push(deletedKey);
+        localStorage.setItem('ledger_deleted_recurring_dates', JSON.stringify(deletedDates));
+      }
+    }
+
     // Optimistic UI state update
     const filtered = expenses.filter((e) => e.id !== id);
     setExpenses(filtered);
@@ -989,12 +1006,21 @@ function App() {
 
     const newTransactions: any[] = [];
 
+    const deletedDatesStr = localStorage.getItem('ledger_deleted_recurring_dates');
+    const deletedDates: string[] = deletedDatesStr ? JSON.parse(deletedDatesStr) : [];
+
     for (const dateVal of datesToCheck) {
       const dayVal = Number(dateVal.substring(8, 10));
 
       const matchingRules = currentRecurring.filter((r) => r.dayOfMonth === dayVal);
 
       for (const rule of matchingRules) {
+        // Skip logging if the user specifically deleted this recurring transaction for this date
+        const deletedKey = `${dateVal}_${rule.id}`;
+        if (deletedDates.includes(deletedKey)) {
+          continue;
+        }
+
         const alreadyLogged = currentExpenses.some(
           (e) => e.date === dateVal && 
                  e.category === rule.category && 
