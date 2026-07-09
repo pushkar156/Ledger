@@ -250,8 +250,26 @@ function App() {
   };
 
   const handleUpdateApp = () => {
-    if (waitingWorker) {
-      waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+    // Purge browser caches to guarantee the app loads the new filenames on update click
+    if ('caches' in window) {
+      caches.keys().then(function(names) {
+        return Promise.all(names.map(function(name) { return caches.delete(name); }));
+      }).then(function() {
+        if (waitingWorker) {
+          waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+        } else {
+          // If update came from a non-sw chunk error, just hard reload
+          (window as any).location.reload();
+        }
+      }).catch(function() {
+        (window as any).location.reload();
+      });
+    } else {
+      if (waitingWorker) {
+        waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+      } else {
+        (window as any).location.reload();
+      }
     }
     setShowUpdatePrompt(false);
   };

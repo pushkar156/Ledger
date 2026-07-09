@@ -3,6 +3,12 @@
   <head>
     <!-- Asset Load Error Fail-Safe Recovery script - Must run first! -->
     <script>
+      // Helper function to dispatch a custom update event instead of auto-reloading
+      function triggerUpdatePrompt() {
+        console.warn('Stale build asset detected. Broadcasting update event...');
+        window.dispatchEvent(new CustomEvent('swUpdateAvailable', { detail: null }));
+      }
+
       // Immediately listen for global module failures
       window.addEventListener('error', function(e) {
         const targetElement = e.target || e.srcElement;
@@ -17,18 +23,8 @@
         );
 
         if (isAssetError || isChunkFailed) {
-          console.warn('Stale build asset detected. Purging cache and refreshing...');
-          if ('caches' in window) {
-            caches.keys().then(function(names) {
-              return Promise.all(names.map(function(name) { return caches.delete(name); }));
-            }).then(function() {
-              window.location.reload(true);
-            }).catch(function() {
-              window.location.reload(true);
-            });
-          } else {
-            window.location.reload(true);
-          }
+          triggerUpdatePrompt();
+          e.preventDefault(); // Stop raw red screen console errors
         }
       }, true);
 
@@ -36,18 +32,8 @@
       window.addEventListener('unhandledrejection', function(e) {
         const reason = e.reason ? (e.reason.message || String(e.reason)) : '';
         if (reason.indexOf('dynamically imported module') > -1 || reason.indexOf('ChunkLoadError') > -1) {
-          console.warn('Stale module promise rejection detected. Purging cache and refreshing...');
-          if ('caches' in window) {
-            caches.keys().then(function(names) {
-              return Promise.all(names.map(function(name) { return caches.delete(name); }));
-            }).then(function() {
-              window.location.reload(true);
-            }).catch(function() {
-              window.location.reload(true);
-            });
-          } else {
-            window.location.reload(true);
-          }
+          triggerUpdatePrompt();
+          e.preventDefault();
         }
       });
     </script>
