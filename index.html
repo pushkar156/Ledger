@@ -3,14 +3,21 @@
   <head>
     <!-- Asset Load Error Fail-Safe Recovery script - Must run first! -->
     <script>
+      // Immediately listen for global module failures
       window.addEventListener('error', function(e) {
-        // Catch chunk/asset load failures due to stale builds
         const targetElement = e.target || e.srcElement;
-        const isAssetError = targetElement && (targetElement.src || targetElement.href) && 
-          ((targetElement.src || targetElement.href).indexOf('/assets/') > -1 || (targetElement.src || targetElement.href).indexOf('.js') > -1 || (targetElement.src || targetElement.href).indexOf('.css') > -1);
+        const src = targetElement ? (targetElement.src || targetElement.href) : '';
+        const isAssetError = src && (src.indexOf('/assets/') > -1 || src.indexOf('.js') > -1 || src.indexOf('.css') > -1);
         
-        if (isAssetError || (e.message && e.message.indexOf('Failed to fetch dynamically imported module') > -1)) {
-          console.warn('Stale build asset detected. Clearing service worker cache and forcing update...');
+        // Match chunk load or fetching errors
+        const isChunkFailed = e.message && (
+          e.message.indexOf('Failed to fetch dynamically imported module') > -1 ||
+          e.message.indexOf('error loading dynamically imported module') > -1 ||
+          e.message.indexOf('ChunkLoadError') > -1
+        );
+
+        if (isAssetError || isChunkFailed) {
+          console.warn('Stale build asset detected. Purging cache and refreshing...');
           if ('caches' in window) {
             caches.keys().then(function(names) {
               return Promise.all(names.map(function(name) { return caches.delete(name); }));
@@ -24,6 +31,25 @@
           }
         }
       }, true);
+
+      // Handle unhandled promise rejections (often thrown by dynamically imported chunks failing)
+      window.addEventListener('unhandledrejection', function(e) {
+        const reason = e.reason ? (e.reason.message || String(e.reason)) : '';
+        if (reason.indexOf('dynamically imported module') > -1 || reason.indexOf('ChunkLoadError') > -1) {
+          console.warn('Stale module promise rejection detected. Purging cache and refreshing...');
+          if ('caches' in window) {
+            caches.keys().then(function(names) {
+              return Promise.all(names.map(function(name) { return caches.delete(name); }));
+            }).then(function() {
+              window.location.reload(true);
+            }).catch(function() {
+              window.location.reload(true);
+            });
+          } else {
+            window.location.reload(true);
+          }
+        }
+      });
     </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
