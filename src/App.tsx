@@ -685,6 +685,18 @@ function App() {
           fetchData();
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'recurring_expenses',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => {
+          fetchData();
+        }
+      )
       .subscribe();
 
     return () => {
