@@ -30,6 +30,27 @@
     <meta property="twitter:title" content="Ledger - Daily Expense Tracker" />
     <meta property="twitter:description" content="Monitor your daily spending, schedule bills, and optimize savings with a calm, precise, and high-fidelity interface." />
     <meta property="twitter:image" content="https://ledger-expense.vercel.app/favicon.png" />
+
+    <!-- Asset Load Error Fail-Safe Recovery script -->
+    <script>
+      window.addEventListener('error', function(e) {
+        // Catch chunk/asset load failures due to stale builds
+        const isAssetError = e.target && (e.target.src || e.target.href) && 
+          (e.target.src || e.target.href).indexOf('/assets/') > -1;
+        if (isAssetError || (e.message && e.message.indexOf('Failed to fetch dynamically imported module') > -1)) {
+          console.warn('Stale asset detected. Clearing caches and refreshing...');
+          if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            caches.keys().then(function(names) {
+              for (let name of names) caches.delete(name);
+            }).then(function() {
+              window.location.reload(true);
+            });
+          } else {
+            window.location.reload(true);
+          }
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>
