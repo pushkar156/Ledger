@@ -8,3 +8,6 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Signal to the fallback update UI in index.html that React mounted successfully
+;(window as any).__REACT_MOUNTED__ = true;

@@ -3,36 +3,83 @@
   <head>
     <!-- Asset Load Error Fail-Safe Recovery script - Must run first! -->
     <script>
-      // Helper function to dispatch a custom update event instead of auto-reloading
-      function triggerUpdatePrompt() {
-        console.warn('Stale build asset detected. Broadcasting update event...');
-        window.dispatchEvent(new CustomEvent('swUpdateAvailable', { detail: null }));
+      // Track whether React successfully mounted
+      window.__REACT_MOUNTED__ = false;
+
+      // Fallback update UI - shown when React can't render due to stale assets
+      function showFallbackUpdateUI() {
+        // Only show if React hasn't mounted (i.e. the app is truly broken)
+        if (window.__REACT_MOUNTED__) {
+          // React is alive, let it handle the update prompt
+          window.dispatchEvent(new CustomEvent('swUpdateAvailable', { detail: null }));
+          return;
+        }
+
+        // Prevent showing multiple times
+        if (document.getElementById('fallback-update-ui')) return;
+
+        var overlay = document.createElement('div');
+        overlay.id = 'fallback-update-ui';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#0E0B16;font-family:system-ui,sans-serif;';
+        overlay.innerHTML = '<div style="text-align:center;max-width:320px;padding:32px;">' +
+          '<div style="font-size:48px;margin-bottom:16px;">🔄</div>' +
+          '<h2 style="color:#EAF2F0;font-size:18px;margin:0 0 8px;">Update Available</h2>' +
+          '<p style="color:#8B9DA5;font-size:13px;margin:0 0 24px;line-height:1.5;">A new version of Ledger is ready. Tap below to update.</p>' +
+          '<button onclick="performFallbackUpdate()" style="background:#A78BFA;color:#0E0B16;border:none;padding:12px 32px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;width:100%;">Update Now</button>' +
+          '</div>';
+        document.body.appendChild(overlay);
       }
 
-      // Immediately listen for global module failures
+      // Perform the update: clear all caches and hard reload
+      window.performFallbackUpdate = function() {
+        var btn = document.querySelector('#fallback-update-ui button');
+        if (btn) { btn.textContent = 'Updating...'; btn.disabled = true; }
+
+        if ('caches' in window) {
+          caches.keys().then(function(names) {
+            return Promise.all(names.map(function(name) { return caches.delete(name); }));
+          }).then(function() {
+            // Also tell any waiting SW to activate
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+              navigator.serviceWorker.getRegistration().then(function(reg) {
+                if (reg && reg.waiting) {
+                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                } else {
+                  window.location.reload();
+                }
+              });
+            } else {
+              window.location.reload();
+            }
+          });
+        } else {
+          window.location.reload();
+        }
+      };
+
+      // Listen for global module/asset failures
       window.addEventListener('error', function(e) {
-        const targetElement = e.target || e.srcElement;
-        const src = targetElement ? (targetElement.src || targetElement.href) : '';
-        const isAssetError = src && (src.indexOf('/assets/') > -1 || src.indexOf('.js') > -1 || src.indexOf('.css') > -1);
+        var target = e.target || e.srcElement;
+        var src = target ? (target.src || target.href) : '';
+        var isAssetError = src && (src.indexOf('/assets/') > -1 || src.indexOf('.js') > -1 || src.indexOf('.css') > -1);
         
-        // Match chunk load or fetching errors
-        const isChunkFailed = e.message && (
+        var isChunkFailed = e.message && (
           e.message.indexOf('Failed to fetch dynamically imported module') > -1 ||
           e.message.indexOf('error loading dynamically imported module') > -1 ||
           e.message.indexOf('ChunkLoadError') > -1
         );
 
         if (isAssetError || isChunkFailed) {
-          triggerUpdatePrompt();
-          e.preventDefault(); // Stop raw red screen console errors
+          showFallbackUpdateUI();
+          e.preventDefault();
         }
       }, true);
 
-      // Handle unhandled promise rejections (often thrown by dynamically imported chunks failing)
+      // Handle unhandled promise rejections (dynamic imports failing)
       window.addEventListener('unhandledrejection', function(e) {
-        const reason = e.reason ? (e.reason.message || String(e.reason)) : '';
-        if (reason.indexOf('dynamically imported module') > -1 || reason.indexOf('ChunkLoadError') > -1) {
-          triggerUpdatePrompt();
+        var reason = e.reason ? (e.reason.message || String(e.reason)) : '';
+        if (reason.indexOf('dynamically imported module') > -1 || reason.indexOf('ChunkLoadError') > -1 || reason.indexOf('Failed to fetch') > -1) {
+          showFallbackUpdateUI();
           e.preventDefault();
         }
       });
