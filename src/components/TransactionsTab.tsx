@@ -227,7 +227,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                             e.stopPropagation();
                             onEditExpense(expense);
                           }}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-ledgerMuted hover:text-ledgerMint hover:bg-ledgerElevated rounded transition-all duration-150"
+                          className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1 text-ledgerMuted hover:text-ledgerMint hover:bg-ledgerElevated rounded transition-all duration-150"
                           title="Edit transaction"
                         >
                           <Edit3 className="w-3.5 h-3.5" />

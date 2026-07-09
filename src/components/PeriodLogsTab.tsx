@@ -214,8 +214,8 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
                         No transactions logged during this period range.
                       </p>
                     ) : (
-                      <div className="divide-y divide-ledgerBorder/30 max-h-[260px] overflow-y-auto pr-1 scrollbar-thin">
-                        {period.transactions.slice(0, 5).map((tx) => {
+                      <div className="divide-y divide-ledgerBorder/30 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                        {period.transactions.map((tx) => {
                           const isCredit = tx.type === 'credit';
                           const catInfo = CATEGORIES[tx.category] || CATEGORIES.other;
 

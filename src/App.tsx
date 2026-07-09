@@ -559,8 +559,24 @@ function App() {
         try {
           const { data: recData, error: recError } = await supabase.from('recurring_expenses').select('*');
           if (recError) throw recError;
-          parsedRecurring = recData || [];
+          
+          const localRec = localStorage.getItem('ledger_recurring');
+          const localParsed: RecurringTransaction[] = localRec ? JSON.parse(localRec) : [];
+          
+          // Merge local recurring bills with cloud to prevent accidental disappearances
+          const cloudMap = new Map((recData || []).map(r => [r.id || `${r.dayOfMonth}-${r.amount}-${r.category}`, r]));
+          const merged = [...(recData || [])];
+          
+          for (const item of localParsed) {
+            const key = item.id || `${item.dayOfMonth}-${item.amount}-${item.category}`;
+            if (!cloudMap.has(key)) {
+              merged.push(item);
+            }
+          }
+          
+          parsedRecurring = merged;
           setRecurring(parsedRecurring);
+          localStorage.setItem('ledger_recurring', JSON.stringify(parsedRecurring));
         } catch (err) {
           console.warn('Supabase recurring_expenses table fetch failed, falling back to local storage:', err);
           const localRec = localStorage.getItem('ledger_recurring');

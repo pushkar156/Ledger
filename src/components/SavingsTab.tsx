@@ -301,7 +301,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
                     
                     <button
                       onClick={() => onDeleteSavings(tx.id)}
-                      className="text-ledgerMuted hover:text-ledgerCoral p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="text-ledgerMuted hover:text-ledgerCoral p-1.5 rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                       title="Delete log"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
