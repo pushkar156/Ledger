@@ -73,9 +73,15 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   const [showFullCalendar, setShowFullCalendar] = useState<boolean>(false);
 
   // Filter based on strip selection (if selectedDate is empty string, show all)
-  const filteredExpenses = selectedDate
-    ? expenses.filter((e) => e.date === selectedDate)
-    : expenses;
+  const isShowingAll = selectedDate === '';
+  const filteredExpenses = isShowingAll
+    ? expenses
+    : expenses.filter((e) => e.date === (selectedDate === 'DEFAULT_TODAY_STUB' ? getLocalDateString() : selectedDate));
+
+  // Compute total spends of all transactions shown in the list when showing all
+  const allSpendSum = isShowingAll
+    ? expenses.filter((e) => e.type !== 'credit').reduce((sum, e) => sum + Number(e.amount), 0)
+    : 0;
 
   if (expenses.length === 0) {
     return (
@@ -162,6 +168,21 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
           expenses={expenses}
           activeRange={activeRange}
         />
+      )}
+
+      {/* Prominent All Spend Total Card when Show All is active */}
+      {isShowingAll && (
+        <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-4.5 shadow-md flex justify-between items-center animate-slide-up">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerCoral">
+              All Spend Total
+            </span>
+            <p className="text-[10px] text-ledgerMuted leading-relaxed">Cumulative debit sum</p>
+          </div>
+          <span className="text-xl font-mono font-bold text-ledgerCoral">
+            ₹{allSpendSum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </span>
+        </div>
       )}
 
       {sortedGroups.length === 0 ? (

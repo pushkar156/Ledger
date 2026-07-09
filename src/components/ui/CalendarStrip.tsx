@@ -83,7 +83,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
           Select Day
         </span>
         <button
-          onClick={() => onSelectDate('')}
+          onClick={() => onSelectDate(selectedDate === '' ? 'DEFAULT_TODAY_STUB' : '')}
           className={cn(
             "text-[10px] font-bold uppercase tracking-wider transition-colors",
             selectedDate === ''
@@ -91,7 +91,7 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
               : "text-ledgerMuted hover:text-ledgerText"
           )}
         >
-          Show All
+          {selectedDate === '' ? 'Return' : 'Show All'}
         </button>
       </div>
 

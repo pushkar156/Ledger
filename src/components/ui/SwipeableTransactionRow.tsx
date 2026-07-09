@@ -36,7 +36,7 @@ export const SwipeableTransactionRow: React.FC<{
     onSwipedRight: () => {
       setSwipeOffset(0);
     },
-    preventScrollOnSwipe: true,
+    preventScrollOnSwipe: false, // Do NOT block vertical page scrolling on swipes
     trackMouse: true,
   });
 
