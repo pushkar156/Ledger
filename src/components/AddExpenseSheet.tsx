@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CATEGORY_LIST } from '../constants/categories';
 import { X, Calendar, AlignLeft } from 'lucide-react';
+import type { Expense } from '../types';
 
 interface AddExpenseSheetProps {
   onClose: () => void;
   onSave: (data: { amount: number; category: string; note: string; date: string; type: 'debit' | 'credit' }) => Promise<void>;
+  editingExpense?: Expense | null;
 }
 
 // Utility to get local date in YYYY-MM-DD
@@ -16,12 +18,12 @@ const getLocalDateString = (): string => {
   return `${year}-${month}-${day}`;
 };
 
-export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSave }) => {
-  const [amount, setAmount] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('food');
-  const [note, setNote] = useState('');
-  const [date, setDate] = useState(getLocalDateString());
-  const [type, setType] = useState<'debit' | 'credit'>('debit');
+export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSave, editingExpense = null }) => {
+  const [amount, setAmount] = useState(editingExpense ? String(editingExpense.amount) : '');
+  const [selectedCategory, setSelectedCategory] = useState<string>(editingExpense ? editingExpense.category : 'food');
+  const [note, setNote] = useState(editingExpense ? (editingExpense.note || '') : '');
+  const [date, setDate] = useState(editingExpense ? editingExpense.date : getLocalDateString());
+  const [type, setType] = useState<'debit' | 'credit'>(editingExpense ? (editingExpense.type as 'debit' | 'credit') : 'debit');
   const [submitting, setSubmitting] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,7 +83,7 @@ export const AddExpenseSheet: React.FC<AddExpenseSheetProps> = ({ onClose, onSav
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-ledgerText uppercase tracking-wider">
-            {type === 'credit' ? 'New Credit' : 'New Expense'}
+            {editingExpense ? (type === 'credit' ? 'Edit Credit' : 'Edit Expense') : (type === 'credit' ? 'New Credit' : 'New Expense')}
           </h2>
           <button
             type="button"

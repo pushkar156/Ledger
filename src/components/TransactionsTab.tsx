@@ -6,11 +6,12 @@ import { EmptyState } from './ui/EmptyState';
 import { SwipeableTransactionRow } from './ui/SwipeableTransactionRow';
 import { CalendarStrip } from './ui/CalendarStrip';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarDays, ListFilter } from 'lucide-react';
+import { CalendarDays, ListFilter, Edit3 } from 'lucide-react';
 
 interface TransactionsTabProps {
   expenses: Expense[];
   onDeleteExpense: (id: string) => void;
+  onEditExpense: (expense: Expense) => void;
   activeRange: { startDate: string; endDate: string };
 }
 
@@ -65,6 +66,7 @@ const formatGroupDate = (dateStr: string): string => {
 export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   expenses,
   onDeleteExpense,
+  onEditExpense,
   activeRange,
 }) => {
   const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString());
@@ -208,7 +210,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                         </div>
                       </div>
 
-                      {/* Right hand Side: Amount */}
+                      {/* Right hand Side: Amount & Edit */}
                       <div className="flex items-center gap-3">
                         <span className={`font-mono text-sm tabular-nums text-right font-medium ${
                           expense.type === 'credit' ? 'text-ledgerGreen' : 'text-ledgerCoral'
@@ -218,6 +220,18 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
                             maximumFractionDigits: 2,
                           })}
                         </span>
+                        
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditExpense(expense);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-ledgerMuted hover:text-ledgerMint hover:bg-ledgerElevated rounded transition-all duration-150"
+                          title="Edit transaction"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   </SwipeableTransactionRow>

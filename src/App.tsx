@@ -257,8 +257,17 @@ function App() {
   };
   
   // Tab states
-  const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'calendar' | 'recurring' | 'settings'>('expenses');
+  const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'calendar' | 'recurring' | 'settings'>(() => {
+    const savedTab = localStorage.getItem('ledger_active_tab');
+    return (savedTab as any) || 'expenses';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ledger_active_tab', activeTab);
+  }, [activeTab]);
+
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [isBudgetEditorOpen, setIsBudgetEditorOpen] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -740,9 +749,9 @@ function App() {
     }, 5000);
   }, []);
 
-  // Add Expense/Credit Callback
+  // Add or Edit Expense/Credit Callback
   const handleSaveExpense = async (data: { amount: number; category: string; note: string; date: string; type: 'debit' | 'credit' }) => {
-    const newExpense = {
+    const expenseData = {
       user_id: session?.user?.id || 'guest-user',
       amount: data.amount,
       category: data.category,
@@ -752,28 +761,56 @@ function App() {
     };
 
     try {
-      if (isOfflineMode || !session?.user) {
-        const currentExpenses = [...expenses];
-        const savedExpense = {
-          ...newExpense,
-          id: `local-${Date.now()}`,
-          created_at: new Date().toISOString(),
-        } as Expense;
-        const updated = [savedExpense, ...currentExpenses].sort((a, b) => b.date.localeCompare(a.date));
-        setExpenses(updated);
-        localStorage.setItem(
-          session?.user ? 'ledger_expenses' : 'ledger_expenses_local_guest',
-          JSON.stringify(updated)
-        );
-        showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
+      if (editingExpense) {
+        // Edit transaction workflow
+        if (isOfflineMode || !session?.user) {
+          const updatedExpenses = expenses.map((e) =>
+            e.id === editingExpense.id
+              ? ({ ...e, ...expenseData } as Expense)
+              : e
+          ).sort((a, b) => b.date.localeCompare(a.date));
+          setExpenses(updatedExpenses);
+          localStorage.setItem(
+            session?.user ? 'ledger_expenses' : 'ledger_expenses_local_guest',
+            JSON.stringify(updatedExpenses)
+          );
+          showToast('Transaction updated.');
+        } else {
+          const { error } = await supabase
+            .from('expenses')
+            .update(expenseData)
+            .eq('id', editingExpense.id);
+          if (error) throw error;
+          showToast('Transaction updated.');
+          fetchData();
+        }
       } else {
-        const { error } = await supabase.from('expenses').insert([newExpense]);
-        if (error) throw error;
-        showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
+        // New transaction creation workflow
+        if (isOfflineMode || !session?.user) {
+          const currentExpenses = [...expenses];
+          const savedExpense = {
+            ...expenseData,
+            id: `local-${Date.now()}`,
+            created_at: new Date().toISOString(),
+          } as Expense;
+          const updated = [savedExpense, ...currentExpenses].sort((a, b) => b.date.localeCompare(a.date));
+          setExpenses(updated);
+          localStorage.setItem(
+            session?.user ? 'ledger_expenses' : 'ledger_expenses_local_guest',
+            JSON.stringify(updated)
+          );
+          showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
+        } else {
+          const { error } = await supabase.from('expenses').insert([expenseData]);
+          if (error) throw error;
+          showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
+        }
       }
     } catch (err) {
       console.error('Error saving transaction:', err);
       showToast('Could not save transaction. Try again.');
+    } finally {
+      setEditingExpense(null);
     }
   };
 
@@ -1476,6 +1513,10 @@ function App() {
                 <TransactionsTab
                   expenses={activePeriodExpenses}
                   onDeleteExpense={handleDeleteExpense}
+                  onEditExpense={(expense) => {
+                    setEditingExpense(expense);
+                    setIsAddSheetOpen(true);
+                  }}
                   activeRange={activeRange}
                 />
               </div>
@@ -1659,7 +1700,11 @@ function App() {
         {/* Add Transaction slide-up modal */}
         {isAddSheetOpen && (
           <AddExpenseSheet
-            onClose={() => setIsAddSheetOpen(false)}
+            editingExpense={editingExpense}
+            onClose={() => {
+              setIsAddSheetOpen(false);
+              setEditingExpense(null);
+            }}
             onSave={handleSaveExpense}
           />
         )}
