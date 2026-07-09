@@ -1,6 +1,6 @@
-const CACHE_NAME = 'ledger-cache-v4';
+const CACHE_NAME = 'ledger-cache-v5';
 
-// Only pre-cache files that return direct (non-redirect) responses
+// Pre-cache only direct non-redirect resources. We do not pre-cache '/' because Vercel/hosts redirect it.
 const SHELL_ASSETS = [
   '/index.html',
   '/manifest.json',
@@ -8,15 +8,13 @@ const SHELL_ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  // Do NOT call skipWaiting() here — wait for user to click "Update"
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(SHELL_ASSETS);
-    })
+    }).then(() => self.skipWaiting()) // Instantly skip waiting on new installs/activation to prevent half-state lockups
   );
 });
 
-// Only skip waiting when the user explicitly clicks the "Update" button
 self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
@@ -24,7 +22,6 @@ self.addEventListener('message', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
-  // Clean up old caches from previous versions
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
@@ -38,52 +35,50 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// Network-First with Cache Fallback for navigation requests, Cache-First for assets.
 self.addEventListener('fetch', (e) => {
-  var url = new URL(e.request.url);
+  const url = new URL(e.request.url);
 
   // Only handle same-origin GET requests
   if (url.origin !== self.location.origin || e.request.method !== 'GET') {
     return;
   }
 
-  // For navigation requests (page loads / reloads), serve cached index.html
+  // NAVIGATION REQUESTS (Page loads, refreshes, /)
+  // Use Network-First: Try to get fresh content first. If offline/404, fall back to index.html from cache.
+  // This prevents cache redirect errors (ERR_FAILED / redirected response follow errors) entirely.
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      caches.match('/index.html').then(function(cached) {
-        if (cached) {
-          return cached;
-        }
-        // Fallback: fetch from network with redirect following enabled
-        return fetch(e.request.url, { redirect: 'follow' });
+      fetch(e.request).catch(() => {
+        return caches.match('/index.html');
       })
     );
     return;
   }
 
-  // For all other same-origin requests (JS, CSS, images, fonts):
-  // Cache-first strategy
+  // STATIC ASSETS (JS, CSS, images, etc.)
+  // Cache-First strategy to ensure speed and offline capabilities.
   e.respondWith(
-    caches.match(e.request).then(function(cached) {
+    caches.match(e.request).then((cached) => {
       if (cached) {
         return cached;
       }
 
-      // Not in cache — fetch from network, cache a copy, return it
-      return fetch(e.request).then(function(networkResponse) {
-        // Only cache successful, non-redirected, same-origin responses
+      return fetch(e.request).then((networkResponse) => {
+        // Cache successful static responses
         if (
           networkResponse &&
           networkResponse.status === 200 &&
           networkResponse.type === 'basic' &&
           !networkResponse.redirected
         ) {
-          var responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then(function(cache) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
             cache.put(e.request, responseClone);
           });
         }
         return networkResponse;
-      }).catch(function() {
+      }).catch(() => {
         return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
       });
     })
