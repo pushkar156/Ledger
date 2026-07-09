@@ -1613,6 +1613,19 @@ function App() {
                 <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-md">
                   <Auth onAuthSuccess={fetchData} hideHeader={true} />
                 </div>
+
+                {/* Signature Footer */}
+                <footer className="pt-4 pb-2 text-center text-[10px] text-ledgerMuted select-none">
+                  Made with ❤️ by{' '}
+                  <a
+                    href="https://github.com/pushkar156"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#9C8EE3] font-bold hover:underline transition-all duration-150 bg-[#9C8EE3]/10 px-1.5 py-0.5 rounded"
+                  >
+                    Pushkar Gangurde
+                  </a>
+                </footer>
               </div>
             )
           )}
