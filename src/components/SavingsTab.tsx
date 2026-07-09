@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import type { SavingsTransaction } from '../types';
-import { PiggyBank, ArrowUpRight, ArrowDownLeft, Plus, Trash2, Calendar, Clipboard } from 'lucide-react';
+import { PiggyBank, ArrowUpRight, ArrowDownLeft, Plus, Calendar, Clipboard } from 'lucide-react';
 import { AnimatedNumber } from './ui/AnimatedNumber';
 import { EmptyState } from './ui/EmptyState';
+import { DeleteLogButton } from './ui/DeleteLogButton';
 
 interface SavingsTabProps {
   savings: SavingsTransaction[];
@@ -299,13 +300,7 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
                       {isDeposit ? '+' : '−'}₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                     
-                    <button
-                      onClick={() => onDeleteSavings(tx.id)}
-                      className="text-ledgerMuted hover:text-ledgerCoral p-1.5 rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-                      title="Delete log"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <DeleteLogButton onConfirm={() => onDeleteSavings(tx.id)} />
                   </div>
                 </div>
               );

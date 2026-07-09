@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import type { RecurringTransaction } from '../types';
 import { CATEGORY_LIST } from '../constants/categories';
-import { Repeat, Plus, Trash2, CalendarDays, Clipboard, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Repeat, Plus, CalendarDays, Clipboard, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { CategoryIcon } from './ui/CategoryIcon';
 import { EmptyState } from './ui/EmptyState';
+import { DeleteLogButton } from './ui/DeleteLogButton';
 
 interface RecurringTabProps {
   recurring: RecurringTransaction[];
@@ -253,13 +254,7 @@ export const RecurringTab: React.FC<RecurringTabProps> = ({
                       {isCredit ? '+' : '−'}₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                     
-                    <button
-                      onClick={() => onDeleteRecurring(tx.id)}
-                      className="text-ledgerMuted hover:text-ledgerCoral p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Delete auto-bill"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <DeleteLogButton onConfirm={() => onDeleteRecurring(tx.id)} />
                   </div>
                 </div>
               );
