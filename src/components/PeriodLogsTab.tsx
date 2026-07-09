@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import type { Expense, Budget } from '../types';
 import { CATEGORIES } from '../constants/categories';
-import { ChevronDown, ChevronUp, CalendarDays, Trash2, Download, Upload } from 'lucide-react';
+import { ChevronDown, ChevronUp, CalendarDays, Trash2, Download, Upload, Edit3 } from 'lucide-react';
 import { DeleteLogButton } from '@/components/ui/DeleteLogButton';
 import { ConfirmationModal } from '@/components/ui/ConfirmationModal';
 
@@ -10,6 +10,7 @@ interface PeriodLogsTabProps {
   allBudgets: Budget[];
   onDeleteExpense: (id: string) => Promise<void>;
   onDeleteBudget: (id: string) => Promise<void>;
+  onEditExpense: (expense: Expense) => void;
   onImportExpenses: (imported: Array<{
     amount: number;
     category: string;
@@ -40,6 +41,7 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
   allBudgets,
   onDeleteExpense,
   onDeleteBudget,
+  onEditExpense,
   onImportExpenses,
 }) => {
   // Store expanded period budget IDs in local state
@@ -409,10 +411,17 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-2.5 flex-shrink-0">
-                                <span className={`font-mono text-xs font-semibold tabular-nums ${isCredit ? 'text-ledgerMint' : 'text-ledgerText'}`}>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className={`font-mono text-xs font-semibold tabular-nums pr-1 ${isCredit ? 'text-ledgerMint' : 'text-ledgerText'}`}>
                                   {isCredit ? '+' : '−'}₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </span>
+                                <button
+                                  onClick={() => onEditExpense(tx)}
+                                  className="text-ledgerMuted hover:text-ledgerMint p-1 rounded opacity-0 group-hover:opacity-100 transition-all hover:bg-ledgerMint/10"
+                                  title="Edit transaction (amount, date, category)"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
                                 <DeleteLogButton onConfirm={() => onDeleteExpense(tx.id)} />
                               </div>
                             </div>

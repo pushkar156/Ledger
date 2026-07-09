@@ -1712,6 +1712,10 @@ function App() {
               onDeleteExpense={handleDeleteExpense}
               onDeleteBudget={handleDeleteBudget}
               onImportExpenses={handleImportExpenses}
+              onEditExpense={(expense) => {
+                setEditingExpense(expense);
+                setIsAddSheetOpen(true);
+              }}
             />
           )}
 
