@@ -287,6 +287,7 @@ function App() {
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [isBudgetEditorOpen, setIsBudgetEditorOpen] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -1275,7 +1276,8 @@ function App() {
     // Find any existing budgets that overlap with the new range
     const overlapping = allBudgets.filter((b) => {
       // Don't check against the budget we are currently editing
-      if (activeBudget && b.id === activeBudget.id) return false;
+      const currentEditingId = editingBudget?.id || activeBudget?.id;
+      if (currentEditingId && b.id === currentEditingId) return false;
       
       const { start, end } = getDates(b);
       return (newStart <= end) && (newEnd >= start);
@@ -1297,7 +1299,7 @@ function App() {
     }
 
     if (hasProtectedOverlap) {
-      const errMsg = 'Overlaps with an active period containing transactions.';
+      const errMsg = 'Overlaps with another active period containing transactions.';
       showToast(errMsg);
       throw new Error(errMsg);
     }
@@ -1318,15 +1320,16 @@ function App() {
       }
     }
 
+    const isUpdating = !!editingBudget;
     const newBudget: Partial<Budget> = {
       user_id: session?.user?.id || 'guest-user',
       type: data.type,
       monthly: data.monthly,
-      category_limits: {},
+      category_limits: editingBudget ? editingBudget.category_limits : {},
     };
 
     if (data.type === 'monthly') {
-      newBudget.month = currentMonthStr;
+      newBudget.month = editingBudget?.month || currentMonthStr;
     } else {
       newBudget.start_date = data.start_date;
       newBudget.end_date = data.end_date;
@@ -1338,13 +1341,30 @@ function App() {
         const localBgHistory = localStorage.getItem(storageKey);
         let budgetsList: Budget[] = localBgHistory ? JSON.parse(localBgHistory) : [];
         
-        // Remove currently active budget if we are replacing it
-        if (activeBudget && activeBudget.id) {
-          budgetsList = budgetsList.filter((b) => b.id !== activeBudget.id);
-        } else if (data.type === 'monthly') {
-          budgetsList = budgetsList.filter(
-            (b) => !(b.type === 'monthly' && b.month === currentMonthStr)
+        if (isUpdating && editingBudget.id) {
+          // Update in-place
+          budgetsList = budgetsList.map((b) => 
+            b.id === editingBudget.id 
+              ? ({ ...b, ...newBudget } as Budget) 
+              : b
           );
+        } else {
+          // Remove currently active budget if we are replacing it
+          if (activeBudget && activeBudget.id) {
+            budgetsList = budgetsList.filter((b) => b.id !== activeBudget.id);
+          } else if (data.type === 'monthly') {
+            budgetsList = budgetsList.filter(
+              (b) => !(b.type === 'monthly' && b.month === currentMonthStr)
+            );
+          }
+
+          const newLocalBudget: Budget = {
+            ...newBudget,
+            id: `local-budget-${Date.now()}`,
+            created_at: new Date().toISOString(),
+          } as Budget;
+
+          budgetsList.push(newLocalBudget);
         }
 
         // Also remove any pre-deleted budgets from local list
@@ -1352,38 +1372,42 @@ function App() {
           budgetsList = budgetsList.filter((b) => !b.id || !budgetsToDelete.includes(b.id));
         }
 
-        const newLocalBudget: Budget = {
-          ...newBudget,
-          id: `local-budget-${Date.now()}`,
-          created_at: new Date().toISOString(),
-        } as Budget;
-
-        budgetsList.push(newLocalBudget);
         localStorage.setItem(storageKey, JSON.stringify(budgetsList));
         setAllBudgets(budgetsList);
         setShowCarryOverPrompt(false);
-        showToast('Budget configured successfully.');
+        setEditingBudget(null);
+        showToast(isUpdating ? 'Budget updated successfully.' : 'Budget configured successfully.');
       } else {
-        // Remove currently active budget from Supabase before inserting
-        if (activeBudget && activeBudget.id) {
-          await supabase
+        if (isUpdating && editingBudget.id) {
+          // Update in-place in Supabase
+          const { error } = await supabase
             .from('budgets')
-            .delete()
-            .eq('id', activeBudget.id);
-        } else if (data.type === 'monthly') {
-          await supabase
-            .from('budgets')
-            .delete()
-            .eq('user_id', session.user.id)
-            .eq('type', 'monthly')
-            .eq('month', currentMonthStr);
-        }
+            .update(newBudget)
+            .eq('id', editingBudget.id);
+          if (error) throw error;
+        } else {
+          // Remove currently active budget from Supabase before inserting
+          if (activeBudget && activeBudget.id) {
+            await supabase
+              .from('budgets')
+              .delete()
+              .eq('id', activeBudget.id);
+          } else if (data.type === 'monthly') {
+            await supabase
+              .from('budgets')
+              .delete()
+              .eq('user_id', session.user.id)
+              .eq('type', 'monthly')
+              .eq('month', currentMonthStr);
+          }
 
-        const { error } = await supabase.from('budgets').insert([newBudget]);
-        if (error) throw error;
+          const { error } = await supabase.from('budgets').insert([newBudget]);
+          if (error) throw error;
+        }
         
         await fetchData();
-        showToast('Budget configured successfully.');
+        setEditingBudget(null);
+        showToast(isUpdating ? 'Budget updated successfully.' : 'Budget configured successfully.');
       }
     } catch (err) {
       console.error('Error saving budget config:', err);
@@ -1716,6 +1740,10 @@ function App() {
                 setEditingExpense(expense);
                 setIsAddSheetOpen(true);
               }}
+              onEditBudget={(budget) => {
+                setEditingBudget(budget);
+                setIsBudgetEditorOpen(true);
+              }}
             />
           )}
 
@@ -1887,11 +1915,13 @@ function App() {
           />
         )}
 
-        {/* Configure Budget Active Slide-up modal */}
         {isBudgetEditorOpen && (
           <ConfigureBudgetSheet
-            activeBudget={activeBudget}
-            onClose={() => setIsBudgetEditorOpen(false)}
+            activeBudget={editingBudget || activeBudget}
+            onClose={() => {
+              setIsBudgetEditorOpen(false);
+              setEditingBudget(null);
+            }}
             onSave={handleSaveBudget}
           />
         )}

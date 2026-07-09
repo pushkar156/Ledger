@@ -11,6 +11,7 @@ interface PeriodLogsTabProps {
   onDeleteExpense: (id: string) => Promise<void>;
   onDeleteBudget: (id: string) => Promise<void>;
   onEditExpense: (expense: Expense) => void;
+  onEditBudget?: (budget: Budget) => void;
   onImportExpenses: (imported: Array<{
     amount: number;
     category: string;
@@ -42,6 +43,7 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
   onDeleteExpense,
   onDeleteBudget,
   onEditExpense,
+  onEditBudget,
   onImportExpenses,
 }) => {
   // Store expanded period budget IDs in local state
@@ -341,6 +343,17 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditBudget?.(period.config);
+                        }}
+                        className="text-ledgerMuted hover:text-ledgerMint opacity-40 hover:opacity-100 transition-all p-1.5 rounded hover:bg-ledgerMint/10"
+                        title="Edit budget period limit and dates"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
