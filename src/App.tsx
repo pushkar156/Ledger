@@ -578,12 +578,17 @@ function App() {
           const { data: recData, error: recError } = await supabase.from('recurring_expenses').select('*');
           if (recError) throw recError;
           
+          const mappedCloud = (recData || []).map((r: any) => ({
+            ...r,
+            dayOfMonth: r.day_of_month
+          }));
+          
           const localRec = localStorage.getItem('ledger_recurring');
           const localParsed: RecurringTransaction[] = localRec ? JSON.parse(localRec) : [];
           
           // Merge local recurring bills with cloud to prevent accidental disappearances
-          const cloudMap = new Map((recData || []).map(r => [r.id || `${r.dayOfMonth}-${r.amount}-${r.category}`, r]));
-          const merged = [...(recData || [])];
+          const cloudMap = new Map(mappedCloud.map(r => [r.id || `${r.dayOfMonth}-${r.amount}-${r.category}`, r]));
+          const merged = [...mappedCloud];
           
           for (const item of localParsed) {
             const key = item.id || `${item.dayOfMonth}-${item.amount}-${item.category}`;
@@ -1055,19 +1060,20 @@ function App() {
   }) => {
     if (!session?.user) return;
 
-    const newRule: Partial<RecurringTransaction> = {
+    const newRule: any = {
       user_id: session.user.id,
       amount: data.amount,
       category: data.category,
       note: data.note,
       type: data.type,
-      dayOfMonth: data.dayOfMonth,
+      day_of_month: data.dayOfMonth,
     };
 
     try {
       if (isOfflineMode) {
         const updated = [...recurring, {
           ...newRule,
+          dayOfMonth: data.dayOfMonth,
           id: `local-rec-rule-${Date.now()}`,
           created_at: new Date().toISOString(),
         } as RecurringTransaction];
@@ -1080,6 +1086,7 @@ function App() {
           console.warn('Failed to insert rule into Supabase, saving locally:', error);
           const updated = [...recurring, {
             ...newRule,
+            dayOfMonth: data.dayOfMonth,
             id: `local-rec-rule-${Date.now()}`,
             created_at: new Date().toISOString(),
           } as RecurringTransaction];
@@ -1087,7 +1094,13 @@ function App() {
           localStorage.setItem('ledger_recurring', JSON.stringify(updated));
         } else {
           const { data: recData } = await supabase.from('recurring_expenses').select('*');
-          if (recData) setRecurring(recData);
+          if (recData) {
+            const mapped = recData.map((r: any) => ({
+              ...r,
+              dayOfMonth: r.day_of_month
+            }));
+            setRecurring(mapped);
+          }
         }
         showToast('Recurring auto-bill configured.');
       }
