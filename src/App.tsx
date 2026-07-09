@@ -1775,9 +1775,8 @@ function App() {
                   <Auth onAuthSuccess={fetchData} hideHeader={true} />
                 </div>
 
-                {/* Signature Footer */}
                 <footer className="pt-4 pb-2 text-center text-[10px] text-ledgerMuted select-none">
-                  Made with ❤️ by{' '}
+                  Made by{' '}
                   <a
                     href="https://github.com/pushkar156"
                     target="_blank"

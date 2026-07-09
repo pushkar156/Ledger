@@ -442,9 +442,8 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         </p>
       )}
 
-      {/* Signature Footer */}
       <footer className="pt-6 pb-2 text-center text-[10px] text-ledgerMuted select-none">
-        Made with ❤️ by{' '}
+        Made by{' '}
         <a
           href="https://github.com/pushkar156"
           target="_blank"
