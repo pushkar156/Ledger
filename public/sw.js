@@ -44,6 +44,11 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
+  // Bypass service worker and fetch directly from network for SEO files
+  if (url.pathname === '/sitemap.xml' || url.pathname === '/robots.txt') {
+    return;
+  }
+
   // NAVIGATION REQUESTS (Page loads, refreshes, /)
   // Use Network-First: Try to get fresh content first. If offline/404, fall back to index.html from cache.
   // This prevents cache redirect errors (ERR_FAILED / redirected response follow errors) entirely.
