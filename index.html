@@ -37,9 +37,41 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch((err) => {
+          navigator.serviceWorker.register('/sw.js').then((reg) => {
+            // Check for updates on load/interval
+            setInterval(() => {
+              reg.update();
+            }, 60 * 1000); // Check for service worker updates every minute
+
+            // Listen for waiting service worker
+            const handleWaiting = (sw) => {
+              window.dispatchEvent(new CustomEvent('swUpdateAvailable', { detail: sw }));
+            };
+
+            if (reg.waiting) {
+              handleWaiting(reg.waiting);
+            }
+
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  handleWaiting(newWorker);
+                }
+              });
+            });
+          }).catch((err) => {
             console.warn('PWA service worker registration failed:', err);
           });
+        });
+
+        // Reload the page when the active service worker changes
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
         });
       }
     </script>
