@@ -179,6 +179,25 @@ const getLocalDateString = (): string => {
   return `${year}-${month}-${day}`;
 };
 
+// Helper to wrap promise with a network request timeout fallback
+const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Network request timed out'));
+    }, ms);
+    promise.then(
+      (res) => {
+        clearTimeout(timer);
+        resolve(res);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+};
+
 function App() {
   const [session, setSession] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -187,6 +206,10 @@ function App() {
   const [allBudgets, setAllBudgets] = useState<Budget[]>([]);
   const [savings, setSavings] = useState<SavingsTransaction[]>([]);
   const [recurring, setRecurring] = useState<RecurringTransaction[]>([]);
+
+  // Connectivity and Offline Sync States
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // New Month Carry Over Banner states
   const [showCarryOverPrompt, setShowCarryOverPrompt] = useState(false);
@@ -478,6 +501,78 @@ function App() {
     }
   }, [isOfflineMode]);
 
+  // Process the queue of offline changes and push to Supabase
+  const syncPendingQueue = useCallback(async () => {
+    if (isOfflineMode || !session?.user || !navigator.onLine) return;
+    const queueJson = localStorage.getItem('ledger_pending_sync_queue');
+    if (!queueJson) return;
+
+    const queue: Array<{ id: string; action: string; payload: any }> = JSON.parse(queueJson);
+    if (queue.length === 0) return;
+
+    setIsSyncing(true);
+    let successCount = 0;
+    const failedItems: typeof queue = [];
+
+    for (const item of queue) {
+      try {
+        if (item.action === 'insert_expense') {
+          const { error } = await supabase.from('expenses').insert([item.payload]);
+          if (error) throw error;
+        } else if (item.action === 'delete_expense') {
+          const { error } = await supabase.from('expenses').delete().eq('id', item.payload.id);
+          if (error) throw error;
+        } else if (item.action === 'insert_budget') {
+          const { error } = await supabase.from('budgets').insert([item.payload]);
+          if (error) throw error;
+        } else if (item.action === 'delete_budget') {
+          const { error } = await supabase.from('budgets').delete().eq('id', item.payload.id);
+          if (error) throw error;
+        } else if (item.action === 'update_budget') {
+          const { error } = await supabase
+            .from('budgets')
+            .update(item.payload.data)
+            .eq('id', item.payload.id);
+          if (error) throw error;
+        } else if (item.action === 'insert_savings') {
+          const { error } = await supabase.from('savings').insert([item.payload]);
+          if (error) throw error;
+        } else if (item.action === 'delete_savings') {
+          const { error } = await supabase.from('savings').delete().eq('id', item.payload.id);
+          if (error) throw error;
+        }
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to sync queued item: ${item.action}`, err);
+        failedItems.push(item);
+      }
+    }
+
+    if (failedItems.length > 0) {
+      localStorage.setItem('ledger_pending_sync_queue', JSON.stringify(failedItems));
+    } else {
+      localStorage.removeItem('ledger_pending_sync_queue');
+    }
+
+    setIsSyncing(false);
+    if (successCount > 0) {
+      showToast(`Synced ${successCount} offline edits to cloud successfully.`);
+      fetchData();
+    }
+  }, [session, isOfflineMode]);
+
+  // Append a database write to the pending offline changes queue
+  const queueSyncAction = useCallback((action: string, payload: any) => {
+    const queueJson = localStorage.getItem('ledger_pending_sync_queue');
+    const queue = queueJson ? JSON.parse(queueJson) : [];
+    queue.push({
+      id: `sync-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      action,
+      payload
+    });
+    localStorage.setItem('ledger_pending_sync_queue', JSON.stringify(queue));
+  }, []);
+
   // Fetch Data (Expenses, Budgets, Savings, and Recurring)
   const fetchData = useCallback(async () => {
     // If no active session, parse from local storage guest key cache
@@ -503,84 +598,59 @@ function App() {
     const previousMonthStr = getPreviousMonthStr(currentMonthStr);
 
     try {
-      if (isOfflineMode) {
-        const localEx = localStorage.getItem('ledger_expenses');
-        const localBgHistory = localStorage.getItem('ledger_budgets_history');
-        const localSav = localStorage.getItem('ledger_savings');
-        const localRec = localStorage.getItem('ledger_recurring');
-        
-        const parsedExpenses: Expense[] = localEx ? JSON.parse(localEx) : [];
-        setExpenses(parsedExpenses);
-
-        const budgetsList: Budget[] = localBgHistory ? JSON.parse(localBgHistory) : [];
-        setAllBudgets(budgetsList);
-
-        const parsedSavings: SavingsTransaction[] = localSav ? JSON.parse(localSav) : [];
-        setSavings(parsedSavings);
-
-        const parsedRecurring: RecurringTransaction[] = localRec ? JSON.parse(localRec) : [];
-        setRecurring(parsedRecurring);
-
-        // Run cleanup
-        cleanupDuplicateBudgets(budgetsList, parsedExpenses);
-
-        // Run Recurring Transaction Checks
-        await checkAndTriggerRecurring(parsedExpenses, parsedRecurring);
-
-        // Compute carry over triggers
-        const todayStr = getLocalDateString();
-        const activeCustom = budgetsList.find(
-          (b) => b.type === 'custom' && b.start_date && b.end_date && todayStr >= b.start_date && todayStr <= b.end_date
-        );
-        const activeMonthly = budgetsList.find(
-          (b) => b.type === 'monthly' && b.month === currentMonthStr
-        );
-
-        if (!activeCustom && !activeMonthly) {
-          const prevRow = budgetsList.find((b) => b.type === 'monthly' && b.month === previousMonthStr);
-          if (prevRow && Number(prevRow.monthly) > 0) {
-            setPreviousMonthBudget(Number(prevRow.monthly));
-            setShowCarryOverPrompt(true);
-          } else {
-            setShowCarryOverPrompt(false);
-          }
-        } else {
-          setShowCarryOverPrompt(false);
-        }
+      if (isOfflineMode || !navigator.onLine) {
+        // Force local cache fallback if offline or mock offline
+        throw new Error('Device is offline');
       } else {
-        const [expensesRes, budgetsRes, savingsRes] = await Promise.all([
-          supabase
-            .from('expenses')
-            .select('*')
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('budgets')
-            .select('*')
-            .eq('user_id', session.user.id),
-          supabase
-            .from('savings')
-            .select('*')
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false }),
-        ]);
+        // Wrap network fetch in a 3.5s timeout for slow connections
+        const [expensesRes, budgetsRes, savingsRes] = await withTimeout(
+          Promise.all([
+            supabase
+              .from('expenses')
+              .select('*')
+              .order('date', { ascending: false })
+              .order('created_at', { ascending: false }),
+            supabase
+              .from('budgets')
+              .select('*')
+              .eq('user_id', session.user.id),
+            supabase
+              .from('savings')
+              .select('*')
+              .order('date', { ascending: false })
+              .order('created_at', { ascending: false }),
+          ]),
+          3500
+        );
 
         if (expensesRes.error) throw expensesRes.error;
         const parsedExpenses = expensesRes.data || [];
         setExpenses(parsedExpenses);
+        localStorage.setItem('ledger_expenses', JSON.stringify(parsedExpenses));
 
         if (budgetsRes.error) throw budgetsRes.error;
         const budgetsList: Budget[] = budgetsRes.data || [];
         setAllBudgets(budgetsList);
+        localStorage.setItem('ledger_budgets_history', JSON.stringify(budgetsList));
 
         if (savingsRes.error) throw savingsRes.error;
-        setSavings(savingsRes.data || []);
+        const parsedSavings = savingsRes.data || [];
+        setSavings(parsedSavings);
+        localStorage.setItem('ledger_savings', JSON.stringify(parsedSavings));
+
+        setIsOnline(true);
 
         // Load recurring transactions from Supabase with fallback to local storage
         let parsedRecurring: RecurringTransaction[] = [];
         try {
-          const { data: recData, error: recError } = await supabase.from('recurring_expenses').select('*');
-          if (recError) throw recError;
+          const recRes = await withTimeout<any>(
+            (async () => {
+              return await supabase.from('recurring_expenses').select('*');
+            })(),
+            3500
+          );
+          if (recRes.error) throw recRes.error;
+          const recData = recRes.data;
           
           const mappedCloud = (recData || []).map((r: any) => ({
             ...r,
@@ -591,7 +661,7 @@ function App() {
           const localParsed: RecurringTransaction[] = localRec ? JSON.parse(localRec) : [];
           
           // Merge local recurring bills with cloud to prevent accidental disappearances
-          const cloudMap = new Map(mappedCloud.map(r => [r.id || `${r.dayOfMonth}-${r.amount}-${r.category}`, r]));
+          const cloudMap = new Map(mappedCloud.map((r: any) => [r.id || `${r.dayOfMonth}-${r.amount}-${r.category}`, r] as [string, any]));
           const merged = [...mappedCloud];
           
           for (const item of localParsed) {
@@ -639,7 +709,53 @@ function App() {
         }
       }
     } catch (err) {
-      console.error('Error fetching Ledger data:', err);
+      console.warn('Network issue or slow connection detected. Falling back to local cache:', err);
+      setIsOnline(false);
+
+      // Fallback: Read all tables from local cache
+      const localEx = localStorage.getItem('ledger_expenses');
+      const localBgHistory = localStorage.getItem('ledger_budgets_history');
+      const localSav = localStorage.getItem('ledger_savings');
+      const localRec = localStorage.getItem('ledger_recurring');
+
+      const parsedExpenses: Expense[] = localEx ? JSON.parse(localEx) : [];
+      setExpenses(parsedExpenses);
+
+      const budgetsList: Budget[] = localBgHistory ? JSON.parse(localBgHistory) : [];
+      setAllBudgets(budgetsList);
+
+      const parsedSavings: SavingsTransaction[] = localSav ? JSON.parse(localSav) : [];
+      setSavings(parsedSavings);
+
+      const parsedRecurring: RecurringTransaction[] = localRec ? JSON.parse(localRec) : [];
+      setRecurring(parsedRecurring);
+
+      // Run cleanup
+      cleanupDuplicateBudgets(budgetsList, parsedExpenses);
+
+      // Run Recurring Transaction Checks
+      await checkAndTriggerRecurring(parsedExpenses, parsedRecurring);
+
+      // Compute carry over triggers
+      const todayStr = getLocalDateString();
+      const activeCustom = budgetsList.find(
+        (b) => b.type === 'custom' && b.start_date && b.end_date && todayStr >= b.start_date && todayStr <= b.end_date
+      );
+      const activeMonthly = budgetsList.find(
+        (b) => b.type === 'monthly' && b.month === currentMonthStr
+      );
+
+      if (!activeCustom && !activeMonthly) {
+        const prevRow = budgetsList.find((b) => b.type === 'monthly' && b.month === previousMonthStr);
+        if (prevRow && Number(prevRow.monthly) > 0) {
+          setPreviousMonthBudget(Number(prevRow.monthly));
+          setShowCarryOverPrompt(true);
+        } else {
+          setShowCarryOverPrompt(false);
+        }
+      } else {
+        setShowCarryOverPrompt(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -649,8 +765,31 @@ function App() {
   useEffect(() => {
     if (session?.user) {
       fetchData();
+      syncPendingQueue();
     }
-  }, [session, fetchData]);
+  }, [session, fetchData, syncPendingQueue]);
+
+  // Listen for online/offline connection state changes
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      showToast('Network connection restored. Syncing offline changes...');
+      syncPendingQueue();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast('Connection offline. Changes will save locally.');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [syncPendingQueue]);
 
   // Supabase Realtime Subscription Binding
   useEffect(() => {
@@ -837,10 +976,12 @@ function App() {
       type: data.type,
     };
 
+    const isGuestOrLocal = isOfflineMode || !session?.user;
+
     try {
       if (editingExpense) {
         // Edit transaction workflow
-        if (isOfflineMode || !session?.user) {
+        if (isGuestOrLocal) {
           const updatedExpenses = expenses.map((e) =>
             e.id === editingExpense.id
               ? ({ ...e, ...expenseData } as Expense)
@@ -853,17 +994,41 @@ function App() {
           );
           showToast('Transaction updated.');
         } else {
-          const { error } = await supabase
-            .from('expenses')
-            .update(expenseData)
-            .eq('id', editingExpense.id);
-          if (error) throw error;
-          showToast('Transaction updated.');
-          fetchData();
+          try {
+            if (!isOnline) throw new Error('Offline mode active');
+            await withTimeout(
+              (async () => {
+                const { error } = await supabase
+                  .from('expenses')
+                  .update(expenseData)
+                  .eq('id', editingExpense.id);
+                if (error) throw error;
+              })(),
+              3500
+            );
+            showToast('Transaction updated.');
+            fetchData();
+          } catch (netErr) {
+            console.warn('Edit expense fallback to offline queue:', netErr);
+            setIsOnline(false);
+            // Apply locally
+            const updatedExpenses = expenses.map((e) =>
+              e.id === editingExpense.id
+                ? ({ ...e, ...expenseData } as Expense)
+                : e
+            ).sort((a, b) => b.date.localeCompare(a.date));
+            setExpenses(updatedExpenses);
+            localStorage.setItem('ledger_expenses', JSON.stringify(updatedExpenses));
+            
+            // Queue delete + insert to simplify edit syncing offline
+            queueSyncAction('delete_expense', { id: editingExpense.id });
+            queueSyncAction('insert_expense', { ...expenseData, id: editingExpense.id });
+            showToast('Saved changes locally (offline).');
+          }
         }
       } else {
         // New transaction creation workflow
-        if (isOfflineMode || !session?.user) {
+        if (isGuestOrLocal) {
           const currentExpenses = [...expenses];
           const savedExpense = {
             ...expenseData,
@@ -878,9 +1043,37 @@ function App() {
           );
           showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
         } else {
-          const { error } = await supabase.from('expenses').insert([expenseData]);
-          if (error) throw error;
-          showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
+          const clientGeneratedId = `local-${Date.now()}`;
+          const savedExpense = {
+            ...expenseData,
+            id: clientGeneratedId,
+            created_at: new Date().toISOString(),
+          } as Expense;
+
+          try {
+            if (!isOnline) throw new Error('Offline mode active');
+            await withTimeout(
+              (async () => {
+                const { error } = await supabase.from('expenses').insert([{ ...expenseData, id: clientGeneratedId }]);
+                if (error) throw error;
+              })(),
+              3500
+            );
+            showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
+            fetchData();
+          } catch (netErr) {
+            console.warn('Insert expense fallback to offline queue:', netErr);
+            setIsOnline(false);
+            
+            // Apply locally immediately
+            const updated = [savedExpense, ...expenses].sort((a, b) => b.date.localeCompare(a.date));
+            setExpenses(updated);
+            localStorage.setItem('ledger_expenses', JSON.stringify(updated));
+
+            // Queue
+            queueSyncAction('insert_expense', { ...expenseData, id: clientGeneratedId });
+            showToast('Saved changes locally (offline).');
+          }
         }
       }
     } catch (err) {
@@ -968,9 +1161,10 @@ function App() {
     if (!backup) return;
 
     try {
+      const current = expenses.filter((e) => e.id !== backup.id);
+      const updated = [backup, ...current].sort((a, b) => b.date.localeCompare(a.date));
+
       if (isOfflineMode || !session?.user) {
-        const current = expenses.filter((e) => e.id !== backup.id);
-        const updated = [backup, ...current].sort((a, b) => b.date.localeCompare(a.date));
         setExpenses(updated);
         localStorage.setItem(
           session?.user ? 'ledger_expenses' : 'ledger_expenses_local_guest',
@@ -978,17 +1172,43 @@ function App() {
         );
         showToast('Transaction restored.');
       } else {
-        const { error } = await supabase.from('expenses').insert([{
-          id: backup.id,
-          user_id: backup.user_id,
-          amount: backup.amount,
-          category: backup.category,
-          note: backup.note,
-          date: backup.date,
-          type: backup.type,
-        }]);
-        if (error) throw error;
-        showToast('Transaction restored.');
+        try {
+          if (!isOnline) throw new Error('Offline mode active');
+          await withTimeout(
+            (async () => {
+              const { error } = await supabase.from('expenses').insert([{
+                id: backup.id,
+                user_id: backup.user_id,
+                amount: backup.amount,
+                category: backup.category,
+                note: backup.note,
+                date: backup.date,
+                type: backup.type,
+              }]);
+              if (error) throw error;
+            })(),
+            3500
+          );
+          setExpenses(updated);
+          localStorage.setItem('ledger_expenses', JSON.stringify(updated));
+          showToast('Transaction restored.');
+        } catch (netErr) {
+          console.warn('Undo delete fallback to offline queue:', netErr);
+          setIsOnline(false);
+          
+          setExpenses(updated);
+          localStorage.setItem('ledger_expenses', JSON.stringify(updated));
+          queueSyncAction('insert_expense', {
+            id: backup.id,
+            user_id: backup.user_id,
+            amount: backup.amount,
+            category: backup.category,
+            note: backup.note,
+            date: backup.date,
+            type: backup.type,
+          });
+          showToast('Restored locally (offline).');
+        }
       }
     } catch (err) {
       console.error('Failed to undo deletion:', err);
@@ -1036,9 +1256,25 @@ function App() {
         );
         showToast('Transaction deleted', 'Undo', handleUndoDelete);
       } else {
-        const { error } = await supabase.from('expenses').delete().eq('id', id);
-        if (error) throw error;
-        showToast('Transaction deleted', 'Undo', handleUndoDelete);
+        try {
+          if (!isOnline) throw new Error('Offline mode active');
+          await withTimeout(
+            (async () => {
+              const { error } = await supabase.from('expenses').delete().eq('id', id);
+              if (error) throw error;
+            })(),
+            3500
+          );
+          localStorage.setItem('ledger_expenses', JSON.stringify(filtered));
+          showToast('Transaction deleted', 'Undo', handleUndoDelete);
+        } catch (netErr) {
+          console.warn('Delete expense fallback to offline queue:', netErr);
+          setIsOnline(false);
+          
+          localStorage.setItem('ledger_expenses', JSON.stringify(filtered));
+          queueSyncAction('delete_expense', { id });
+          showToast('Deleted locally (offline).', 'Undo', handleUndoDelete);
+        }
       }
     } catch (err) {
       console.error('Error deleting transaction:', err);
@@ -1060,9 +1296,25 @@ function App() {
         );
         showToast('Budget period deleted.');
       } else {
-        const { error } = await supabase.from('budgets').delete().eq('id', id);
-        if (error) throw error;
-        showToast('Budget period deleted.');
+        try {
+          if (!isOnline) throw new Error('Offline mode active');
+          await withTimeout(
+            (async () => {
+              const { error } = await supabase.from('budgets').delete().eq('id', id);
+              if (error) throw error;
+            })(),
+            3500
+          );
+          localStorage.setItem('ledger_budgets_history', JSON.stringify(remaining));
+          showToast('Budget period deleted.');
+        } catch (netErr) {
+          console.warn('Delete budget fallback to offline queue:', netErr);
+          setIsOnline(false);
+          
+          localStorage.setItem('ledger_budgets_history', JSON.stringify(remaining));
+          queueSyncAction('delete_budget', { id });
+          showToast('Deleted locally (offline).');
+        }
       }
     } catch (err) {
       console.error('Error deleting budget period:', err);
@@ -1399,31 +1651,83 @@ function App() {
         setEditingBudget(null);
         showToast(isUpdating ? 'Budget updated successfully.' : 'Budget configured successfully.');
       } else {
-        if (isUpdating && editingBudget.id) {
-          // Update in-place in Supabase
-          const { error } = await supabase
-            .from('budgets')
-            .update(newBudget)
-            .eq('id', editingBudget.id);
-          if (error) throw error;
-        } else {
-          // Only delete the older monthly budget if it is for the SAME month
-          if (data.type === 'monthly') {
-            await supabase
-              .from('budgets')
-              .delete()
-              .eq('user_id', session.user.id)
-              .eq('type', 'monthly')
-              .eq('month', currentMonthStr);
+        const localBgHistory = localStorage.getItem('ledger_budgets_history');
+        let budgetsList: Budget[] = localBgHistory ? JSON.parse(localBgHistory) : [];
+
+        try {
+          if (!isOnline) throw new Error('Offline mode active');
+
+          if (isUpdating && editingBudget.id) {
+            // Update in-place in Supabase
+            await withTimeout(
+              (async () => {
+                const { error } = await supabase
+                  .from('budgets')
+                  .update(newBudget)
+                  .eq('id', editingBudget.id);
+                if (error) throw error;
+              })(),
+              3500
+            );
+          } else {
+            // Only delete the older monthly budget if it is for the SAME month
+            if (data.type === 'monthly') {
+              await withTimeout(
+                (async () => {
+                  const { error } = await supabase
+                    .from('budgets')
+                    .delete()
+                    .eq('user_id', session.user.id)
+                    .eq('type', 'monthly')
+                    .eq('month', currentMonthStr);
+                  if (error) throw error;
+                })(),
+                3500
+              );
+            }
+
+            await withTimeout(
+              (async () => {
+                const { error } = await supabase.from('budgets').insert([newBudget]);
+                if (error) throw error;
+              })(),
+              3500
+            );
+          }
+          
+          await fetchData();
+          setEditingBudget(null);
+          showToast(isUpdating ? 'Budget updated successfully.' : 'Budget configured successfully.');
+        } catch (netErr) {
+          console.warn('Save budget fallback to offline queue:', netErr);
+          setIsOnline(false);
+
+          // Apply locally
+          if (isUpdating && editingBudget.id) {
+            budgetsList = budgetsList.map((b) => 
+              b.id === editingBudget.id ? ({ ...b, ...newBudget } as Budget) : b
+            );
+            queueSyncAction('update_budget', { id: editingBudget.id, data: newBudget });
+          } else {
+            if (data.type === 'monthly') {
+              budgetsList = budgetsList.filter(
+                (b) => !(b.type === 'monthly' && b.month === currentMonthStr)
+              );
+            }
+            const clientGeneratedId = `local-budget-${Date.now()}`;
+            budgetsList.push({
+              ...newBudget,
+              id: clientGeneratedId,
+              created_at: new Date().toISOString()
+            } as Budget);
+            queueSyncAction('insert_budget', { ...newBudget, id: clientGeneratedId });
           }
 
-          const { error } = await supabase.from('budgets').insert([newBudget]);
-          if (error) throw error;
+          localStorage.setItem('ledger_budgets_history', JSON.stringify(budgetsList));
+          setAllBudgets(budgetsList);
+          setEditingBudget(null);
+          showToast('Saved budget configuration locally (offline).');
         }
-        
-        await fetchData();
-        setEditingBudget(null);
-        showToast(isUpdating ? 'Budget updated successfully.' : 'Budget configured successfully.');
       }
     } catch (err) {
       console.error('Error saving budget config:', err);
@@ -1470,9 +1774,36 @@ function App() {
         localStorage.setItem('ledger_savings', JSON.stringify(updated));
         showToast(data.type === 'incoming' ? 'Savings deposit logged.' : 'Savings withdrawal logged.');
       } else {
-        const { error } = await supabase.from('savings').insert([newSavings]);
-        if (error) throw error;
-        showToast(data.type === 'incoming' ? 'Savings deposit logged.' : 'Savings withdrawal logged.');
+        const clientGeneratedId = `local-savings-${Date.now()}`;
+        const saved = {
+          ...newSavings,
+          id: clientGeneratedId,
+          created_at: new Date().toISOString(),
+        } as SavingsTransaction;
+
+        try {
+          if (!isOnline) throw new Error('Offline mode active');
+          await withTimeout(
+            (async () => {
+              const { error } = await supabase.from('savings').insert([{ ...newSavings, id: clientGeneratedId }]);
+              if (error) throw error;
+            })(),
+            3500
+          );
+          showToast(data.type === 'incoming' ? 'Savings deposit logged.' : 'Savings withdrawal logged.');
+          fetchData();
+        } catch (netErr) {
+          console.warn('Add savings fallback to offline queue:', netErr);
+          setIsOnline(false);
+
+          // Apply locally
+          const updated = [saved, ...savings].sort((a, b) => b.date.localeCompare(a.date));
+          setSavings(updated);
+          localStorage.setItem('ledger_savings', JSON.stringify(updated));
+
+          queueSyncAction('insert_savings', { ...newSavings, id: clientGeneratedId });
+          showToast('Saved savings entry locally (offline).');
+        }
       }
     } catch (err) {
       console.error('Error saving savings transaction:', err);
@@ -1490,9 +1821,25 @@ function App() {
         localStorage.setItem('ledger_savings', JSON.stringify(filtered));
         showToast('Savings entry deleted.');
       } else {
-        const { error } = await supabase.from('savings').delete().eq('id', id);
-        if (error) throw error;
-        showToast('Savings entry deleted.');
+        try {
+          if (!isOnline) throw new Error('Offline mode active');
+          await withTimeout(
+            (async () => {
+              const { error } = await supabase.from('savings').delete().eq('id', id);
+              if (error) throw error;
+            })(),
+            3500
+          );
+          localStorage.setItem('ledger_savings', JSON.stringify(filtered));
+          showToast('Savings entry deleted.');
+        } catch (netErr) {
+          console.warn('Delete savings fallback to offline queue:', netErr);
+          setIsOnline(false);
+
+          localStorage.setItem('ledger_savings', JSON.stringify(filtered));
+          queueSyncAction('delete_savings', { id });
+          showToast('Deleted savings entry locally (offline).');
+        }
       }
     } catch (err) {
       console.error('Error deleting savings entry:', err);
@@ -1580,16 +1927,54 @@ function App() {
                 ₹<AnimatedNumber value={currentBalance} precision={2} />
               </h1>
             </div>
-            
-            {/* Configure Budget Trigger Button */}
-            <button
-              onClick={() => setIsBudgetEditorOpen(true)}
-              className="text-ledgerMuted hover:text-ledgerMint transition-all p-2 rounded-lg bg-ledgerElevated/50 border border-ledgerBorder hover:border-ledgerMint/40 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider shadow"
-              title="Configure Budget"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Setup
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Connection Sync Indicator */}
+              {session?.user && !isOfflineMode && (
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[8px] font-extrabold uppercase tracking-widest shadow select-none transition-all duration-300 ${
+                    isOnline
+                      ? isSyncing
+                        ? 'bg-ledgerMint/5 border-ledgerMint/25 text-ledgerMint animate-pulse'
+                        : 'bg-ledgerMint/5 border-ledgerMint/15 text-ledgerMint'
+                      : 'bg-ledgerCoral/5 border-ledgerCoral/25 text-ledgerCoral animate-pulse'
+                  }`}
+                  title={
+                    isOnline
+                      ? isSyncing
+                        ? 'Syncing changes to cloud...'
+                        : 'Connected: All changes synced to Cloud'
+                      : 'Offline: Changes saved locally'
+                  }
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isOnline
+                        ? isSyncing
+                          ? 'bg-ledgerMint animate-ping'
+                          : 'bg-ledgerMint'
+                        : 'bg-ledgerCoral animate-pulse'
+                    }`}
+                  />
+                  <span>
+                    {isOnline
+                      ? isSyncing
+                        ? 'Syncing'
+                        : 'Synced'
+                      : 'Offline'}
+                  </span>
+                </div>
+              )}
+
+              {/* Configure Budget Trigger Button */}
+              <button
+                onClick={() => setIsBudgetEditorOpen(true)}
+                className="text-ledgerMuted hover:text-ledgerMint transition-all p-2 rounded-lg bg-ledgerElevated/50 border border-ledgerBorder hover:border-ledgerMint/40 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider shadow"
+                title="Configure Budget"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                Setup
+              </button>
+            </div>
           </div>
 
           {/* Budget Progress Bar */}
