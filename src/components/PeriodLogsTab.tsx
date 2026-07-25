@@ -99,6 +99,168 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
     downloadCSV(period.transactions, `ledger_expenses_period_${sanitizedLabel}.csv`);
   };
 
+  // Generate printable document layout to save as PDF
+  const printPeriodPDF = (period: any) => {
+    if (period.transactions.length === 0) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const title = `Ledger Statement - ${period.label}`;
+    const txRows = period.transactions
+      .map((tx: Expense) => {
+        const catInfo = CATEGORIES[tx.category] || CATEGORIES.other;
+        const sign = tx.type === 'credit' ? '+' : '−';
+        const color = tx.type === 'credit' ? '#10b981' : '#0f172a';
+        return `
+          <tr>
+            <td style="font-family: monospace;">${tx.date}</td>
+            <td>${catInfo.emoji} ${catInfo.label}</td>
+            <td>${tx.note || '—'}</td>
+            <td style="text-align: right; font-family: monospace; font-weight: 600; color: ${color};">
+              ${sign}₹${tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              color: #0f172a;
+              margin: 40px;
+              line-height: 1.5;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid #e2e8f0;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .title {
+              margin: 0;
+              font-size: 24px;
+              font-weight: 700;
+              letter-spacing: -0.025em;
+            }
+            .subtitle {
+              color: #64748b;
+              font-size: 14px;
+              margin-top: 4px;
+            }
+            .summary-cards {
+              display: grid;
+              grid-template-cols: repeat(4, 1fr);
+              gap: 16px;
+              margin-bottom: 30px;
+            }
+            .card {
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              padding: 16px;
+              background-color: #f8fafc;
+            }
+            .card-title {
+              font-size: 10px;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              color: #64748b;
+              font-weight: 600;
+              margin: 0 0 6px 0;
+            }
+            .card-val {
+              font-size: 18px;
+              font-weight: 700;
+              margin: 0;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 20px;
+            }
+            th, td {
+              padding: 12px 16px;
+              text-align: left;
+              border-bottom: 1px solid #edf2f7;
+              font-size: 13px;
+            }
+            th {
+              background-color: #f1f5f9;
+              color: #475569;
+              font-weight: 600;
+            }
+            @media print {
+              body { margin: 20px; }
+              .card { background-color: #ffffff !important; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Ledger Statement</h1>
+              <div class="subtitle">Period: ${period.label}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-weight: bold; font-size: 16px; color: #0f1b1e;">LEDGER APP</div>
+              <div class="subtitle" style="font-size: 11px;">Generated on ${new Date().toLocaleDateString('en-IN')}</div>
+            </div>
+          </div>
+
+          <div class="summary-cards">
+            <div class="card">
+              <h4 class="card-title">Budget Limit</h4>
+              <p class="card-val">₹${period.limit.toLocaleString('en-IN')}</p>
+            </div>
+            <div class="card">
+              <h4 class="card-title">Total Spent</h4>
+              <p class="card-val">₹${period.spent.toLocaleString('en-IN')}</p>
+            </div>
+            <div class="card">
+              <h4 class="card-title">Total Credited</h4>
+              <p class="card-val" style="color: #10b981;">₹${period.credited.toLocaleString('en-IN')}</p>
+            </div>
+            <div class="card">
+              <h4 class="card-title">Remaining</h4>
+              <p class="card-val" style="color: ${period.balance < 0 ? '#ef4444' : '#059669'}">
+                ₹${period.balance.toLocaleString('en-IN')}
+              </p>
+            </div>
+          </div>
+
+          <h3>Transaction History (${period.transactions.length})</h3>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 15%;">Date</th>
+                <th style="width: 25%;">Category</th>
+                <th style="width: 40%;">Note</th>
+                <th style="text-align: right; width: 20%;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${txRows}
+            </tbody>
+          </table>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   // Trigger file browser for CSV upload
   const triggerCSVImport = () => {
     fileInputRef.current?.click();
@@ -381,16 +543,28 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
                           Transaction History ({period.transactions.length})
                         </h5>
                         {period.transactions.length > 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              exportPeriodToCSV(period);
-                            }}
-                            className="text-[9px] text-ledgerMint hover:text-ledgerMint/80 font-bold uppercase tracking-wider border border-ledgerMint/20 hover:border-ledgerMint/40 bg-ledgerMint/5 px-2 py-0.5 rounded transition"
-                            title="Export only this period's logs as CSV"
-                          >
-                            Export CSV
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                exportPeriodToCSV(period);
+                              }}
+                              className="text-[9px] text-ledgerMint hover:text-ledgerMint/80 font-bold uppercase tracking-wider border border-ledgerMint/20 hover:border-ledgerMint/40 bg-ledgerMint/5 px-2 py-0.5 rounded transition"
+                              title="Export only this period's logs as CSV"
+                            >
+                              Export CSV
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                printPeriodPDF(period);
+                              }}
+                              className="text-[9px] text-ledgerMint hover:text-ledgerMint/80 font-bold uppercase tracking-wider border border-ledgerMint/20 hover:border-ledgerMint/40 bg-ledgerMint/5 px-2 py-0.5 rounded transition"
+                              title="Download/Print PDF statement"
+                            >
+                              Print PDF
+                            </button>
+                          </div>
                         )}
                       </div>
                       <span className="text-[9px] text-ledgerMuted font-mono">

@@ -481,32 +481,61 @@ export const InsightsTab: React.FC<InsightsTabProps> = ({
                       const pctNum = (entry.value / scopedTotal) * 100;
                       const pct = pctNum.toFixed(0);
                       
+                      // Check if there is an individual category limit configured
+                      const catLimit = activeBudget?.category_limits?.[entry.id] || 0;
+                      const hasLimit = catLimit > 0;
+                      const limitPercentage = hasLimit ? (entry.value / catLimit) * 100 : 0;
+                      const isOverLimit = hasLimit && entry.value > catLimit;
+                      
                       return (
-                        <div key={entry.id} className="p-3 rounded-lg bg-ledgerElevated/30 border border-ledgerBorder/40 flex flex-col space-y-2">
+                        <div key={entry.id} className={`p-3 rounded-lg border transition-all ${
+                          isOverLimit 
+                            ? 'bg-ledgerCoral/5 border-ledgerCoral/20' 
+                            : 'bg-ledgerElevated/30 border-ledgerBorder/40'
+                        } flex flex-col space-y-2`}>
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-2.5 min-w-0">
                               <span className={`w-6 h-6 rounded flex items-center justify-center text-xs ${entry.bgClass}`}>
                                 {entry.emoji}
                               </span>
-                              <span className="text-xs text-ledgerText font-medium truncate">
-                                {entry.name}
-                              </span>
-                              <span className="text-[9px] text-ledgerMuted font-mono bg-ledgerElevated border border-ledgerBorder/60 px-1 rounded">
-                                {pct}% footprint
-                              </span>
+                              <div className="min-w-0">
+                                <span className="block text-xs text-ledgerText font-medium truncate">
+                                  {entry.name}
+                                </span>
+                                <span className="text-[9px] text-ledgerMuted font-mono block">
+                                  {pct}% of period total
+                                </span>
+                              </div>
                             </div>
-                            <span className="font-mono text-xs text-ledgerText tabular-nums text-right font-medium">
-                              ₹{entry.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                            </span>
+                            <div className="text-right">
+                              {hasLimit ? (
+                                <>
+                                  <span className={`block font-mono text-xs font-semibold tabular-nums ${
+                                    isOverLimit ? 'text-ledgerCoral' : 'text-ledgerText'
+                                  }`}>
+                                    ₹{entry.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })} / ₹{catLimit.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                  </span>
+                                  <span className={`text-[9px] font-mono block ${
+                                    isOverLimit ? 'text-ledgerCoral font-bold' : 'text-ledgerMuted'
+                                  }`}>
+                                    {isOverLimit ? 'Over Limit!' : `${limitPercentage.toFixed(0)}% limit used`}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="font-mono text-xs text-ledgerText tabular-nums font-medium">
+                                  ₹{entry.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           
-                          {/* Relative Footprint progress bar indicator */}
+                          {/* Relative Footprint/Limit progress bar indicator */}
                           <div className="w-full h-1 bg-ledgerElevated rounded-full overflow-hidden">
                             <div
                               className="h-full rounded-full transition-all duration-500 ease-out"
                               style={{ 
-                                width: `${pctNum}%`,
-                                backgroundColor: entry.color 
+                                width: `${hasLimit ? Math.min(100, limitPercentage) : pctNum}%`,
+                                backgroundColor: isOverLimit ? 'var(--color-ledgerCoral)' : entry.color 
                               }}
                             />
                           </div>

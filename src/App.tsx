@@ -1241,6 +1241,7 @@ function App() {
     monthly: number;
     start_date?: string;
     end_date?: string;
+    category_limits?: Record<string, number>;
   }) => {
     if (!session?.user) return;
     const currentMonthStr = new Date().toISOString().substring(0, 7); // "YYYY-MM"
@@ -1325,7 +1326,7 @@ function App() {
       user_id: session?.user?.id || 'guest-user',
       type: data.type,
       monthly: data.monthly,
-      category_limits: editingBudget ? editingBudget.category_limits : {},
+      category_limits: data.category_limits || {},
     };
 
     if (data.type === 'monthly') {

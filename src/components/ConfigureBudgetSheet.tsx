@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Budget } from '../types';
-import { Save, AlertCircle, Calendar, CalendarRange, X } from 'lucide-react';
+import { Save, AlertCircle, Calendar, CalendarRange, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { CATEGORY_LIST } from '../constants/categories';
 
 interface ConfigureBudgetSheetProps {
   activeBudget: Budget | null;
@@ -10,6 +11,7 @@ interface ConfigureBudgetSheetProps {
     monthly: number;
     start_date?: string;
     end_date?: string;
+    category_limits?: Record<string, number>;
   }) => Promise<void>;
 }
 
@@ -28,6 +30,8 @@ export const ConfigureBudgetSheet: React.FC<ConfigureBudgetSheetProps> = ({
 }) => {
   const [trackingMode, setTrackingMode] = useState<'monthly' | 'custom'>('monthly');
   const [budgetString, setBudgetString] = useState('');
+  const [showCategoryLimits, setShowCategoryLimits] = useState(false);
+  const [categoryLimits, setCategoryLimits] = useState<Record<string, string>>({});
   
   // Custom Date fields
   const [startDate, setStartDate] = useState(getLocalDateString());
@@ -49,6 +53,16 @@ export const ConfigureBudgetSheet: React.FC<ConfigureBudgetSheetProps> = ({
         if (activeBudget.start_date) setStartDate(activeBudget.start_date);
         if (activeBudget.end_date) setEndDate(activeBudget.end_date);
       }
+      // Populate category limits state
+      const initialLimits: Record<string, string> = {};
+      if (activeBudget.category_limits) {
+        Object.entries(activeBudget.category_limits).forEach(([cat, val]) => {
+          if (val > 0) {
+            initialLimits[cat] = val.toString();
+          }
+        });
+      }
+      setCategoryLimits(initialLimits);
     }
   }, [activeBudget]);
 
@@ -60,6 +74,15 @@ export const ConfigureBudgetSheet: React.FC<ConfigureBudgetSheetProps> = ({
     } else {
       setValidationError(null);
       setStartDate(val);
+    }
+  };
+
+  const handleCategoryLimitChange = (catId: string, value: string) => {
+    if (/^\d*\.?\d{0,2}$/.test(value)) {
+      setCategoryLimits((prev) => ({
+        ...prev,
+        [catId]: value,
+      }));
     }
   };
 
@@ -90,6 +113,15 @@ export const ConfigureBudgetSheet: React.FC<ConfigureBudgetSheetProps> = ({
       }
     }
 
+    // Convert string category limits to numbers
+    const parsedLimits: Record<string, number> = {};
+    Object.entries(categoryLimits).forEach(([cat, val]) => {
+      const parsed = parseFloat(val);
+      if (!isNaN(parsed) && parsed > 0) {
+        parsedLimits[cat] = parsed;
+      }
+    });
+
     setSaving(true);
     try {
       await onSave({
@@ -97,6 +129,7 @@ export const ConfigureBudgetSheet: React.FC<ConfigureBudgetSheetProps> = ({
         monthly: limitNum,
         start_date: trackingMode === 'custom' ? startDate : undefined,
         end_date: trackingMode === 'custom' ? endDate : undefined,
+        category_limits: parsedLimits,
       });
       onClose();
     } catch (err) {
@@ -109,7 +142,7 @@ export const ConfigureBudgetSheet: React.FC<ConfigureBudgetSheetProps> = ({
 
   return (
     <div className="fixed inset-0 bg-[#0F1B1E]/80 backdrop-blur-sm z-50 flex items-end justify-center animate-fade-in">
-      <div className="w-full max-w-[480px] bg-ledgerSurface border-t border-ledgerBorder rounded-t-2xl p-5 pb-8 shadow-2xl flex flex-col space-y-4 animate-slide-up relative">
+      <div className="w-full max-w-[480px] bg-ledgerSurface border-t border-ledgerBorder rounded-t-2xl p-5 pb-8 shadow-2xl flex flex-col space-y-4 animate-slide-up relative max-h-[85vh] overflow-y-auto scrollbar-thin">
         
         {/* Header Title & Close Button */}
         <div className="flex justify-between items-center">
@@ -209,6 +242,50 @@ export const ConfigureBudgetSheet: React.FC<ConfigureBudgetSheetProps> = ({
                 className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-3 pl-8 pr-4 font-mono text-sm tracking-tight transition"
               />
             </div>
+          </div>
+
+          {/* Collapsible Category Limits section */}
+          <div className="border border-ledgerBorder rounded-xl overflow-hidden bg-ledgerElevated/20">
+            <button
+              type="button"
+              onClick={() => setShowCategoryLimits(!showCategoryLimits)}
+              className="w-full px-4 py-3 flex justify-between items-center hover:bg-ledgerElevated/40 transition select-none"
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ledgerMuted">
+                Category Limits (Optional)
+              </span>
+              {showCategoryLimits ? (
+                <ChevronUp className="w-4 h-4 text-ledgerMuted" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-ledgerMuted" />
+              )}
+            </button>
+
+            {showCategoryLimits && (
+              <div className="p-4 border-t border-ledgerBorder/60 space-y-3 bg-ledgerSurface/40 max-h-[220px] overflow-y-auto scrollbar-thin animate-fade-in">
+                {CATEGORY_LIST.map((cat) => (
+                  <div key={cat.id} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm">{cat.emoji}</span>
+                      <span className="text-xs text-ledgerText truncate">{cat.label}</span>
+                    </div>
+                    <div className="relative w-32 flex-shrink-0">
+                      <span className="absolute left-2.5 top-1/2 transform -translate-y-1/2 font-mono text-ledgerMuted text-xs">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Limit"
+                        value={categoryLimits[cat.id] || ''}
+                        onChange={(e) => handleCategoryLimitChange(cat.id, e.target.value)}
+                        className="w-full bg-ledgerElevated border border-ledgerBorder text-ledgerText rounded-lg py-1.5 pl-6 pr-2 font-mono text-xs text-right transition"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <button
