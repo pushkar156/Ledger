@@ -10,6 +10,7 @@ import { CalendarDays, ListFilter, Edit3 } from 'lucide-react';
 
 interface TransactionsTabProps {
   expenses: Expense[];
+  allExpenses?: Expense[];
   onDeleteExpense: (id: string) => void;
   onEditExpense: (expense: Expense) => void;
   activeRange: { startDate: string; endDate: string };
@@ -66,6 +67,7 @@ const formatGroupDate = (dateStr: string): string => {
 
 export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   expenses,
+  allExpenses,
   onDeleteExpense,
   onEditExpense,
   activeRange,
@@ -88,18 +90,20 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
   };
   const [showFullCalendar, setShowFullCalendar] = useState<boolean>(false);
 
+  const sourceExpenses = allExpenses || expenses;
+
   // Filter based on strip selection (if selectedDate is empty string, show all)
   const isShowingAll = selectedDate === '';
   const filteredExpenses = isShowingAll
     ? expenses
-    : expenses.filter((e) => e.date === (selectedDate === 'DEFAULT_TODAY_STUB' ? getLocalDateString() : selectedDate));
+    : sourceExpenses.filter((e) => e.date === (selectedDate === 'DEFAULT_TODAY_STUB' ? getLocalDateString() : selectedDate));
 
   // Compute total spends of all transactions shown in the list when showing all
   const allSpendSum = isShowingAll
     ? expenses.filter((e) => e.type !== 'credit').reduce((sum, e) => sum + Number(e.amount), 0)
     : 0;
 
-  if (expenses.length === 0) {
+  if (expenses.length === 0 && sourceExpenses.length === 0) {
     return (
       <EmptyState
         title="No expenses yet"
@@ -171,7 +175,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
               }
             }}
             className="text-ledgerText"
-            expenses={expenses}
+            expenses={sourceExpenses}
             numberOfMonths={1}
             showOutsideDays={false}
           />
@@ -181,7 +185,7 @@ export const TransactionsTab: React.FC<TransactionsTabProps> = ({
         <CalendarStrip
           selectedDate={selectedDate}
           onSelectDate={handleDateChange}
-          expenses={expenses}
+          expenses={sourceExpenses}
           activeRange={activeRange}
         />
       )}

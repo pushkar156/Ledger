@@ -2096,6 +2096,7 @@ function App() {
                 </h3>
                 <TransactionsTab
                   expenses={activePeriodExpenses}
+                  allExpenses={expenses}
                   onDeleteExpense={handleDeleteExpense}
                   onEditExpense={(expense) => {
                     setEditingExpense(expense);
