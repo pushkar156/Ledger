@@ -1350,10 +1350,8 @@ function App() {
               : b
           );
         } else {
-          // Remove currently active budget if we are replacing it
-          if (activeBudget && activeBudget.id) {
-            budgetsList = budgetsList.filter((b) => b.id !== activeBudget.id);
-          } else if (data.type === 'monthly') {
+          // Only replace if there is an existing monthly budget for the SAME month
+          if (data.type === 'monthly') {
             budgetsList = budgetsList.filter(
               (b) => !(b.type === 'monthly' && b.month === currentMonthStr)
             );
@@ -1387,13 +1385,8 @@ function App() {
             .eq('id', editingBudget.id);
           if (error) throw error;
         } else {
-          // Remove currently active budget from Supabase before inserting
-          if (activeBudget && activeBudget.id) {
-            await supabase
-              .from('budgets')
-              .delete()
-              .eq('id', activeBudget.id);
-          } else if (data.type === 'monthly') {
+          // Only delete the older monthly budget if it is for the SAME month
+          if (data.type === 'monthly') {
             await supabase
               .from('budgets')
               .delete()
