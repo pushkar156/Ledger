@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ledger-cache-v5';
+const CACHE_NAME = 'ledger-cache-v6';
 
 // Pre-cache only direct non-redirect resources. We do not pre-cache '/' because Vercel/hosts redirect it.
 const SHELL_ASSETS = [
@@ -74,7 +74,7 @@ self.addEventListener('fetch', (e) => {
         if (
           networkResponse &&
           networkResponse.status === 200 &&
-          networkResponse.type === 'basic' &&
+          (networkResponse.type === 'basic' || networkResponse.type === 'cors') &&
           !networkResponse.redirected
         ) {
           const responseClone = networkResponse.clone();
