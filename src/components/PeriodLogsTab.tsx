@@ -402,11 +402,8 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
       };
     });
 
-    // Sort periods by creation date / start date descending (newest first)
+    // Sort periods strictly by start date descending (newest periods first)
     return mapped.sort((a, b) => {
-      if (b.createdAtTime !== a.createdAtTime) {
-        return b.createdAtTime - a.createdAtTime;
-      }
       return b.startDate.localeCompare(a.startDate);
     });
   }, [allBudgets, expenses]);
