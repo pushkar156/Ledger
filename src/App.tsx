@@ -731,14 +731,36 @@ function App() {
       };
     }
 
-    // Sort budgets by created_at descending (latest first) to pick the active preference
-    const sortedBudgets = [...allBudgets].sort((a, b) => {
-      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return bTime - aTime;
+    // Prioritize budget periods that cover today's date
+    const currentMonthStr = todayStr.substring(0, 7);
+
+    const getBudgetRangeDates = (b: Budget) => {
+      if (b.type === 'custom') {
+        return { start: b.start_date || '', end: b.end_date || '' };
+      } else {
+        const monthStr = b.month || currentMonthStr;
+        const range = getMonthRange(monthStr);
+        return { start: range.startDate, end: range.endDate };
+      }
+    };
+
+    // Find any budget covering today
+    const coveringToday = allBudgets.find((b) => {
+      const { start, end } = getBudgetRangeDates(b);
+      return todayStr >= start && todayStr <= end;
     });
 
-    const latestBudget = sortedBudgets[0];
+    let latestBudget = coveringToday;
+
+    if (!latestBudget) {
+      // Fallback: Sort budgets by created_at descending (latest first)
+      const sortedBudgets = [...allBudgets].sort((a, b) => {
+        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bTime - aTime;
+      });
+      latestBudget = sortedBudgets[0];
+    }
 
     if (latestBudget.type === 'custom') {
       return {
@@ -1727,6 +1749,7 @@ function App() {
             <PeriodLogsTab
               expenses={expenses}
               allBudgets={allBudgets}
+              activeBudget={activeBudget}
               onDeleteExpense={handleDeleteExpense}
               onDeleteBudget={handleDeleteBudget}
               onImportExpenses={handleImportExpenses}

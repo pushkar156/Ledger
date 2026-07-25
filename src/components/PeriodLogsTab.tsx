@@ -8,6 +8,7 @@ import { ConfirmationModal } from '@/components/ui/ConfirmationModal';
 interface PeriodLogsTabProps {
   expenses: Expense[];
   allBudgets: Budget[];
+  activeBudget?: Budget | null;
   onDeleteExpense: (id: string) => Promise<void>;
   onDeleteBudget: (id: string) => Promise<void>;
   onEditExpense: (expense: Expense) => void;
@@ -40,6 +41,7 @@ const getMonthRange = (monthStr: string) => {
 export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
   expenses,
   allBudgets,
+  activeBudget,
   onDeleteExpense,
   onDeleteBudget,
   onEditExpense,
@@ -402,11 +404,26 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
       };
     });
 
-    // Sort periods strictly by start date descending (newest periods first)
+    // Sort: Active budget ALWAYS goes first, then remaining sorted by start date descending
     return mapped.sort((a, b) => {
+      const isAActive = activeBudget && (
+        (activeBudget.id && a.config.id === activeBudget.id) ||
+        (activeBudget.type === 'monthly' && a.config.type === 'monthly' && a.config.month === activeBudget.month) ||
+        (activeBudget.type === 'custom' && a.config.type === 'custom' && a.config.start_date === activeBudget.start_date && a.config.end_date === activeBudget.end_date)
+      );
+
+      const isBActive = activeBudget && (
+        (activeBudget.id && b.config.id === activeBudget.id) ||
+        (activeBudget.type === 'monthly' && b.config.type === 'monthly' && b.config.month === activeBudget.month) ||
+        (activeBudget.type === 'custom' && b.config.type === 'custom' && b.config.start_date === activeBudget.start_date && b.config.end_date === activeBudget.end_date)
+      );
+
+      if (isAActive && !isBActive) return -1;
+      if (!isAActive && isBActive) return 1;
+
       return b.startDate.localeCompare(a.startDate);
     });
-  }, [allBudgets, expenses]);
+  }, [allBudgets, expenses, activeBudget]);
 
   return (
     <div className="space-y-4 pb-28 animate-fade-in">
@@ -459,11 +476,18 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
           {periodsData.map((period) => {
             const isExpanded = !!expandedPeriodIds[period.id];
             const isBalanceNegative = period.balance < 0;
+            const isActive = activeBudget && (
+              (activeBudget.id && period.config.id === activeBudget.id) ||
+              (activeBudget.type === 'monthly' && period.config.type === 'monthly' && period.config.month === activeBudget.month) ||
+              (activeBudget.type === 'custom' && period.config.type === 'custom' && period.config.start_date === activeBudget.start_date && period.config.end_date === activeBudget.end_date)
+            );
 
             return (
               <div
                 key={period.id}
-                className="bg-ledgerSurface border border-ledgerBorder rounded-xl overflow-hidden shadow-md transition-all duration-200"
+                className={`bg-ledgerSurface border rounded-xl overflow-hidden shadow-md transition-all duration-200 ${
+                  isActive ? 'border-ledgerMint' : 'border-ledgerBorder'
+                }`}
               >
                 {/* Period Summary Card Header */}
                 <div
@@ -475,6 +499,11 @@ export const PeriodLogsTab: React.FC<PeriodLogsTabProps> = ({
                       <h4 className="text-xs font-bold text-ledgerText truncate">
                         {period.label}
                       </h4>
+                      {isActive && (
+                        <span className="text-[8px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-ledgerMint text-[#0F1B1E] animate-pulse">
+                          Active
+                        </span>
+                      )}
                       <span className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
                         period.config.type === 'custom'
                           ? 'border-indigo-400/20 text-indigo-300 bg-indigo-400/5'
