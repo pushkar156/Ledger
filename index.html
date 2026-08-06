@@ -93,6 +93,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="google-site-verification" content="d5JB8I01D3kEbzDEPWamxt-CCabyGKie-Sb2UvGMBws" />
     
+    <!-- JSON-LD Structured Data Schema for Search Engines -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Ledger - Daily Expense Tracker",
+      "url": "https://ledger-daily.vercel.app/",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "All",
+      "browserRequirements": "Requires JavaScript. Requires HTML5.",
+      "description": "Ledger is a calm, precise, and fast personal finance and budget tracker. Monitor daily spending, configure recurring auto-bills, and track savings balances seamlessly.",
+      "author": {
+        "@type": "Person",
+        "name": "Pushkar",
+        "url": "https://github.com/pushkar156"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "INR"
+      },
+      "featureList": [
+        "Daily expense and income credit logging",
+        "Custom range and monthly budget cycles",
+        "Category spending limits with warning indicators",
+        "Printable financial PDF logs and report export",
+        "Auto-bill automated recurring scheduler"
+      ]
+    }
+    </script>
+    
     <!-- SEO Standard Meta Tags -->
     <title>Ledger - Daily Expense Tracker</title>
     <meta name="description" content="Ledger is a calm, precise, and fast personal finance and budget tracker. Monitor daily spending, configure recurring auto-bills, and track savings balances seamlessly." />
@@ -116,7 +147,47 @@
     <meta property="twitter:image" content="https://ledger-daily.vercel.app/favicon.png" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- SEO Semantic Pre-render Fallback Landing Page -->
+      <noscript>
+        <div style="font-family: system-ui, -apple-system, sans-serif; padding: 40px 24px; max-width: 640px; margin: 0 auto; color: #EAF2F0; background: #0E0B16; border-radius: 16px; margin-top: 40px; border: 1px solid #1C1921;">
+          <h1 style="color: #A78BFA; font-size: 28px; margin-top: 0;">Ledger — Daily Expense Tracker & Personal Finance Manager</h1>
+          <p style="color: #8B9DA5; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
+            Ledger is a beautiful, private, and lightning-fast personal finance app designed to help you organize your daily spending, set budget limits, schedule automatic bills, and track your savings balances seamlessly.
+          </p>
+          <div style="background: #151122; padding: 16px 20px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #231E35;">
+            <p style="margin: 0; font-size: 13px; color: #E8A94C; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em;">JavaScript Required</p>
+            <p style="margin: 6px 0 0 0; font-size: 13px; color: #8B9DA5; line-height: 1.5;">To use this interactive finance tracker and manage your logs, please enable JavaScript in your browser settings and refresh the page.</p>
+          </div>
+          <h2 style="color: #EAF2F0; font-size: 18px; margin-top: 24px;">Core Features & Highlights</h2>
+          <ul style="color: #8B9DA5; font-size: 14px; line-height: 1.8; padding-left: 20px; margin-bottom: 24px;">
+            <li><strong>Expense & Income Logging:</strong> Record your transactions with custom categories, dates, and optional notes instantly.</li>
+            <li><strong>Dynamic Budget Cycles:</strong> Configure monthly or custom range budgets. The active period is automatically pinned and highlighted at the top.</li>
+            <li><strong>Category Limits:</strong> Set monthly limits on dining, shopping, bills, travel, and more. Visual progress bars alert you when you approach or exceed limits.</li>
+            <li><strong>Savings Ledger:</strong> Log savings deposits and withdrawals to track your total accumulated wealth cleanly.</li>
+            <li><strong>Auto-Bill Recurring Scheduler:</strong> Define recurring templates (e.g., monthly rent, utilities) and let Ledger auto-log them on their due dates.</li>
+            <li><strong>Export PDF Reports:</strong> Compile neat, formatted financial reports suitable for physical printing or digital sharing.</li>
+            <li><strong>PWA Support:</strong> Install Ledger directly to your home screen or desktop for a lightweight, app-like experience.</li>
+          </ul>
+          <h2 style="color: #EAF2F0; font-size: 18px; margin-top: 24px;">Secure and Private by Design</h2>
+          <p style="color: #8B9DA5; font-size: 14px; line-height: 1.6; margin-bottom: 0;">
+            Your financial data is protected by Supabase Row-Level Security (RLS) policies, ensuring your records are private and visible only to you.
+          </p>
+        </div>
+      </noscript>
+      <!-- Loader screen shown to crawlers and users while React mounts -->
+      <div id="loading-screen" style="position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0E0B16; font-family: system-ui, -apple-system, sans-serif; z-index: 9999;">
+        <div style="font-size: 48px; margin-bottom: 16px; animation: pulse 2s infinite ease-in-out;">💼</div>
+        <h1 style="color: #EAF2F0; font-size: 20px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.01em;">Ledger</h1>
+        <p style="color: #8B9DA5; font-size: 12px; margin: 0; font-weight: 500;">Loading your personal financial dashboard...</p>
+        <style>
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.08); opacity: 1; }
+          }
+        </style>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
