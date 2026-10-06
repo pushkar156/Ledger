@@ -7,13 +7,13 @@ import {
 } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyB-hgDWhNd1i3FUC2eJHa2aosJp4pM_07U',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'ledger-daily-expenses.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'ledger-daily-expenses',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'ledger-daily-expenses.firebasestorage.app',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '587599270134',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:587599270134:web:8e12a6a830c71cf9cb5cd7',
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-PY63XY6ZBH',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
 };
 
 export const hasFirebaseCreds = Boolean(
@@ -22,11 +22,14 @@ export const hasFirebaseCreds = Boolean(
 
 if (!hasFirebaseCreds) {
   console.warn(
-    'Firebase environment variables are missing. Please check your .env.local configuration.'
+    'Firebase environment variables are missing. Running in offline/sandbox mode.'
   );
 }
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+// When credentials are not provided (e.g. offline sandbox preview), initialize with a dummy fallback so exported instances do not throw at import time
+const app = getApps().length === 0 
+  ? initializeApp(hasFirebaseCreds ? firebaseConfig : { apiKey: 'dummy-offline-key', projectId: 'dummy-offline-project' })
+  : getApp();
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
