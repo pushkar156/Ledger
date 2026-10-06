@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -90,6 +91,13 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess, hideHeader = false })
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     setError(null);
+
+    if (Capacitor.isNativePlatform()) {
+      setError('Google Sign-In is only supported in web browsers. On the Android mobile app, please log in with your Email and Password below.');
+      setGoogleLoading(false);
+      return;
+    }
+
     try {
       const res = await signInWithPopup(auth, googleProvider);
       if (res.user) {
@@ -99,7 +107,9 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess, hideHeader = false })
         onAuthSuccess();
       }
     } catch (err: any) {
-      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+      if (err.code === 'auth/operation-not-supported-in-this-environment' || err.message?.includes('disallowed_useragent') || err.code === 'auth/popup-blocked') {
+        setError('Google popups are blocked inside the mobile view. Please sign in using your Email & Password below.');
+      } else if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
         setError(err.message || 'Google sign-in failed.');
       }
     } finally {
@@ -141,6 +151,11 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess, hideHeader = false })
               </svg>
             )}
             <span>Continue with Google</span>
+            {Capacitor.isNativePlatform() && (
+              <span className="text-[10px] bg-ledgerSurface border border-ledgerBorder px-1.5 py-0.5 rounded text-ledgerMuted ml-1">
+                Web only
+              </span>
+            )}
           </button>
 
           <div className="relative flex items-center justify-center my-3">

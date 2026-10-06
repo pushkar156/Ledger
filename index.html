@@ -6,14 +6,9 @@
       // Track whether React successfully mounted
       window.__REACT_MOUNTED__ = false;
 
-      // Fallback update UI - shown when React can't render due to stale assets
+      // Fallback update UI - shown only when React fails to mount due to stale assets
       function showFallbackUpdateUI() {
-        // Only show if React hasn't mounted (i.e. the app is truly broken)
-        if (window.__REACT_MOUNTED__) {
-          // React is alive, let it handle the update prompt
-          window.dispatchEvent(new CustomEvent('swUpdateAvailable', { detail: null }));
-          return;
-        }
+        if (window.__REACT_MOUNTED__) return;
 
         // Prevent showing multiple times
         if (document.getElementById('fallback-update-ui')) return;
@@ -39,44 +34,31 @@
           caches.keys().then(function(names) {
             return Promise.all(names.map(function(name) { return caches.delete(name); }));
           }).then(function() {
-            // Also tell any waiting SW to activate
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-              navigator.serviceWorker.getRegistration().then(function(reg) {
-                if (reg && reg.waiting) {
-                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-                } else {
-                  window.location.reload();
-                }
-              });
-            } else {
-              window.location.reload();
-            }
+            window.location.reload();
           });
         } else {
           window.location.reload();
         }
       };
 
-      // Listen for global module/asset failures
+      // Listen for critical module/chunk load failures before React mounts
       window.addEventListener('error', function(e) {
-        var target = e.target || e.srcElement;
-        var src = target ? (target.src || target.href) : '';
-        var isAssetError = src && (src.indexOf('/assets/') > -1 || src.indexOf('.js') > -1 || src.indexOf('.css') > -1);
-        
+        if (window.__REACT_MOUNTED__) return;
         var isChunkFailed = e.message && (
           e.message.indexOf('Failed to fetch dynamically imported module') > -1 ||
           e.message.indexOf('error loading dynamically imported module') > -1 ||
           e.message.indexOf('ChunkLoadError') > -1
         );
 
-        if (isAssetError || isChunkFailed) {
+        if (isChunkFailed) {
           showFallbackUpdateUI();
           e.preventDefault();
         }
       }, true);
 
-      // Handle unhandled promise rejections (dynamic imports failing)
+      // Handle unhandled promise rejections before React mounts
       window.addEventListener('unhandledrejection', function(e) {
+        if (window.__REACT_MOUNTED__) return;
         var reason = e.reason ? (e.reason.message || String(e.reason)) : '';
         if (reason.indexOf('dynamically imported module') > -1 || reason.indexOf('ChunkLoadError') > -1 || reason.indexOf('Failed to fetch') > -1) {
           showFallbackUpdateUI();
@@ -171,7 +153,7 @@
           </ul>
           <h2 style="color: #EAF2F0; font-size: 18px; margin-top: 24px;">Secure and Private by Design</h2>
           <p style="color: #8B9DA5; font-size: 14px; line-height: 1.6; margin-bottom: 0;">
-            Your financial data is protected by Supabase Row-Level Security (RLS) policies, ensuring your records are private and visible only to you.
+            Your financial data is protected by Firebase Firestore Security Rules and Auth, ensuring your records are private and visible only to you.
           </p>
         </div>
       </noscript>
@@ -190,7 +172,12 @@
     </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      if ('serviceWorker' in navigator) {
+      var isNativePlatform = window.Capacitor !== undefined || 
+                             window.location.protocol === 'capacitor:' || 
+                             window.location.protocol === 'ionic:' ||
+                             (window.location.hostname === 'localhost' && /Android|iPhone|iPad/i.test(navigator.userAgent));
+
+      if ('serviceWorker' in navigator && !isNativePlatform) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').then((reg) => {
             // Check for updates on load/interval

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { auth, db, hasFirebaseCreds } from './lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
@@ -216,8 +217,10 @@ function App() {
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
 
-  // Listener to capture PWA installation prompt and update available events
+  // Listener to capture PWA installation prompt and update available events (web only)
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -235,8 +238,10 @@ function App() {
 
     const handleSWUpdate = (e: Event) => {
       const sw = (e as CustomEvent).detail;
-      setWaitingWorker(sw);
-      setShowUpdatePrompt(true);
+      if (sw) {
+        setWaitingWorker(sw);
+        setShowUpdatePrompt(true);
+      }
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -262,6 +267,7 @@ function App() {
   };
 
   const handleUpdateApp = () => {
+    setShowUpdatePrompt(false);
     // Purge browser caches to guarantee the app loads the new filenames on update click
     if ('caches' in window) {
       caches.keys().then(function(names) {
@@ -270,7 +276,6 @@ function App() {
         if (waitingWorker) {
           waitingWorker.postMessage({ type: 'SKIP_WAITING' });
         } else {
-          // If update came from a non-sw chunk error, just hard reload
           (window as any).location.reload();
         }
       }).catch(function() {
@@ -283,7 +288,6 @@ function App() {
         (window as any).location.reload();
       }
     }
-    setShowUpdatePrompt(false);
   };
   
   // Tab states
@@ -1533,23 +1537,32 @@ function App() {
         {isOfflineMode && (
           <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-300 px-4 py-2 text-[10px] font-medium flex items-center gap-2 justify-center select-none">
             <WifiOff className="w-3.5 h-3.5" />
-            Offline Sandbox Mode (Demo). Set Supabase variables in .env.local to go live.
+            Offline Sandbox Mode (Demo). Set Firebase variables in .env.local to go live.
           </div>
         )}
 
-        {/* PWA Update Banner Prompt */}
-        {showUpdatePrompt && (
+        {/* PWA Update Banner Prompt (web only) */}
+        {showUpdatePrompt && !Capacitor.isNativePlatform() && (
           <div className="bg-ledgerMint/10 border-b border-ledgerMint/25 text-ledgerMint px-4 py-2.5 text-xs font-semibold flex items-center gap-3 justify-between select-none animate-slide-down">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-ledgerMint animate-pulse" />
-              <span>A new update is available for Ledger!</span>
+              <Sparkles className="w-4 h-4 text-ledgerMint animate-pulse shrink-0" />
+              <span className="truncate">A new update is available for Ledger!</span>
             </div>
-            <button
-              onClick={handleUpdateApp}
-              className="bg-ledgerMint text-[#0F1B1E] px-3 py-1 rounded text-[10px] uppercase font-bold tracking-wider hover:bg-ledgerMint/90 active:scale-95 transition"
-            >
-              Update Now
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleUpdateApp}
+                className="bg-ledgerMint text-[#0F1B1E] px-3 py-1 rounded text-[10px] uppercase font-bold tracking-wider hover:bg-ledgerMint/90 active:scale-95 transition"
+              >
+                Update Now
+              </button>
+              <button
+                onClick={() => setShowUpdatePrompt(false)}
+                className="text-ledgerMuted hover:text-ledgerMint p-1 rounded transition text-xs font-bold leading-none"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         )}
 
