@@ -1,5 +1,17 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { supabase, hasSupabaseCreds } from './lib/supabase';
+import { auth, db, hasFirebaseCreds } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  getDocs,
+  query,
+  where,
+  onSnapshot,
+  writeBatch,
+} from 'firebase/firestore';
 import type { Expense, Budget, SavingsTransaction, RecurringTransaction } from './types';
 import { Auth } from './components/Auth';
 import { BudgetBar } from './components/BudgetBar';
@@ -300,12 +312,12 @@ function App() {
   const lastDeletedExpenseRef = useRef<Expense | null>(null);
 
   // Helper check for offline database mode
-  const isOfflineMode = !hasSupabaseCreds;
+  const isOfflineMode = !hasFirebaseCreds;
 
   // Initialize Auth & Offline Storage Seeding
   useEffect(() => {
     if (isOfflineMode) {
-      setSession({ user: { id: 'mock-user-123', email: 'ledger.offline@local' } });
+      setSession({ user: { id: 'mock-user-123', uid: 'mock-user-123', email: 'ledger.offline@local' } });
       setAuthChecked(true);
 
       const seeded = localStorage.getItem('ledger_seeded_v2');
@@ -331,64 +343,64 @@ function App() {
       }
       setLoading(false);
     } else {
-      // With Supabase credentials present: check for active user session or default to local guest mode
-      supabase.auth.getSession().then(({ data: { session: activeSession } }) => {
-        if (activeSession) {
+      // With Firebase credentials present: listen for authentication state changes
+      const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+        if (firebaseUser) {
+          const activeSession = {
+            user: {
+              id: firebaseUser.uid,
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              displayName: firebaseUser.displayName || '',
+              photoURL: firebaseUser.photoURL || '',
+            }
+          };
           setSession(activeSession);
-          // If we have local unsynced expenses, trigger migration to Supabase on startup
+          // If we have local unsynced expenses, trigger migration on startup
           const localUnsynced = localStorage.getItem('ledger_expenses_local_guest');
           if (localUnsynced) {
-            migrateLocalGuestData(activeSession.user.id, JSON.parse(localUnsynced));
+            migrateLocalGuestData(firebaseUser.uid, JSON.parse(localUnsynced));
           }
         } else {
           // No active account session -> Start in local sandbox guest mode (default homepage)
           setSession(null);
-        }
-        setAuthChecked(true);
-        setLoading(false);
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
-        setSession(activeSession);
-        if (activeSession) {
-          // Migrate local guest data upon login
-          const localUnsynced = localStorage.getItem('ledger_expenses_local_guest');
-          if (localUnsynced) {
-            migrateLocalGuestData(activeSession.user.id, JSON.parse(localUnsynced));
-          }
-          fetchData();
-        } else {
-          // Clear active user states but preserve guest caches
           setExpenses([]);
           setAllBudgets([]);
           setSavings([]);
           setRecurring([]);
         }
+        setAuthChecked(true);
+        setLoading(false);
       });
 
       return () => {
-        subscription.unsubscribe();
+        unsubscribe();
       };
     }
   }, [isOfflineMode]);
 
-  // Migrate local guest caches to Supabase cloud storage on login
+  // Migrate local guest caches to Firebase cloud storage on login
   const migrateLocalGuestData = async (userId: string, guestExpenses: Expense[]) => {
     if (guestExpenses.length === 0) return;
     try {
-      console.log('Migrating local guest expenses to Supabase for user:', userId);
-      const rowsToInsert = guestExpenses.map(e => ({
-        user_id: userId,
-        amount: Number(e.amount),
-        category: e.category,
-        note: e.note,
-        date: e.date,
-        type: e.type || 'debit'
-      }));
+      console.log('Migrating local guest expenses to Firebase for user:', userId);
+      const batch = writeBatch(db);
+      guestExpenses.forEach((e) => {
+        const newDoc = doc(collection(db, 'expenses'));
+        batch.set(newDoc, {
+          id: newDoc.id,
+          user_id: userId,
+          amount: Number(e.amount),
+          category: e.category,
+          note: e.note || null,
+          date: e.date,
+          type: e.type || 'debit',
+          created_at: e.created_at || new Date().toISOString(),
+        });
+      });
 
-      const { error } = await supabase.from('expenses').insert(rowsToInsert);
-      if (error) throw error;
-      
+      await batch.commit();
+
       // Clear guest storage on success
       localStorage.removeItem('ledger_expenses_local_guest');
       showToast(`Successfully synced ${guestExpenses.length} local expenses to your cloud profile!`);
@@ -468,7 +480,7 @@ function App() {
           localStorage.setItem('ledger_budgets_history', JSON.stringify(current));
           setAllBudgets(current);
         } else {
-          await supabase.from('budgets').delete().in('id', budgetsToDelete);
+          await Promise.all(budgetsToDelete.map((bId) => deleteDoc(doc(db, 'budgets', bId))));
           const current = budgetsList.filter((b) => !b.id || !budgetsToDelete.includes(b.id));
           setAllBudgets(current);
         }
@@ -548,64 +560,55 @@ function App() {
           setShowCarryOverPrompt(false);
         }
       } else {
-        const [expensesRes, budgetsRes, savingsRes] = await Promise.all([
-          supabase
-            .from('expenses')
-            .select('*')
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('budgets')
-            .select('*')
-            .eq('user_id', session.user.id),
-          supabase
-            .from('savings')
-            .select('*')
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false }),
+        const uid = session.user.id || session.user.uid;
+        const [expensesRes, budgetsRes, savingsRes, recRes] = await Promise.all([
+          getDocs(query(collection(db, 'expenses'), where('user_id', '==', uid))),
+          getDocs(query(collection(db, 'budgets'), where('user_id', '==', uid))),
+          getDocs(query(collection(db, 'savings'), where('user_id', '==', uid))),
+          getDocs(query(collection(db, 'recurring_expenses'), where('user_id', '==', uid))),
         ]);
 
-        if (expensesRes.error) throw expensesRes.error;
-        const parsedExpenses = expensesRes.data || [];
+        const parsedExpenses: Expense[] = expensesRes.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        parsedExpenses.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created_at || '').localeCompare(a.created_at || ''));
         setExpenses(parsedExpenses);
 
-        if (budgetsRes.error) throw budgetsRes.error;
-        const budgetsList: Budget[] = budgetsRes.data || [];
+        const budgetsList: Budget[] = budgetsRes.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
         setAllBudgets(budgetsList);
 
-        if (savingsRes.error) throw savingsRes.error;
-        setSavings(savingsRes.data || []);
+        const savingsList: SavingsTransaction[] = savingsRes.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        savingsList.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created_at || '').localeCompare(a.created_at || ''));
+        setSavings(savingsList);
 
-        // Load recurring transactions from Supabase with fallback to local storage
+        // Load recurring transactions from Firestore with fallback to local storage
         let parsedRecurring: RecurringTransaction[] = [];
         try {
-          const { data: recData, error: recError } = await supabase.from('recurring_expenses').select('*');
-          if (recError) throw recError;
-          
-          const mappedCloud = (recData || []).map((r: any) => ({
-            ...r,
-            dayOfMonth: r.day_of_month
-          }));
-          
+          const mappedCloud = recRes.docs.map((d) => {
+            const r = d.data();
+            return {
+              id: d.id,
+              ...(r as any),
+              dayOfMonth: (r as any).day_of_month || (r as any).dayOfMonth,
+            };
+          });
+
           const localRec = localStorage.getItem('ledger_recurring');
           const localParsed: RecurringTransaction[] = localRec ? JSON.parse(localRec) : [];
-          
-          // Merge local recurring bills with cloud to prevent accidental disappearances
+
           const cloudMap = new Map(mappedCloud.map((r: any) => [r.id || `${r.dayOfMonth}-${r.amount}-${r.category}`, r] as [string, any]));
           const merged = [...mappedCloud];
-          
+
           for (const item of localParsed) {
             const key = item.id || `${item.dayOfMonth}-${item.amount}-${item.category}`;
             if (!cloudMap.has(key)) {
               merged.push(item);
             }
           }
-          
+
           parsedRecurring = merged;
           setRecurring(parsedRecurring);
           localStorage.setItem('ledger_recurring', JSON.stringify(parsedRecurring));
         } catch (err) {
-          console.warn('Supabase recurring_expenses table fetch failed, falling back to local storage:', err);
+          console.warn('Firestore recurring_expenses fetch failed, falling back to local storage:', err);
           const localRec = localStorage.getItem('ledger_recurring');
           parsedRecurring = localRec ? JSON.parse(localRec) : [];
           setRecurring(parsedRecurring);
@@ -652,66 +655,64 @@ function App() {
     }
   }, [session, fetchData]);
 
-  // Supabase Realtime Subscription Binding
+  // Firestore Realtime & Offline Persistence Listener Binding
   useEffect(() => {
     if (isOfflineMode || !session?.user) return;
+    const uid = session.user.id || session.user.uid;
 
-    const channel = supabase
-      .channel(`ledger_realtime_sync_${session.user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'expenses',
-          filter: `user_id=eq.${session.user.id}`,
-        },
-        () => {
-          fetchData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'budgets',
-          filter: `user_id=eq.${session.user.id}`,
-        },
-        () => {
-          fetchData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'savings',
-          filter: `user_id=eq.${session.user.id}`,
-        },
-        () => {
-          fetchData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'recurring_expenses',
-          filter: `user_id=eq.${session.user.id}`,
-        },
-        () => {
-          fetchData();
-        }
-      )
-      .subscribe();
+    const unsubExpenses = onSnapshot(
+      query(collection(db, 'expenses'), where('user_id', '==', uid)),
+      (snapshot) => {
+        const list: Expense[] = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        list.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created_at || '').localeCompare(a.created_at || ''));
+        setExpenses(list);
+      },
+      (err) => console.error('Expenses onSnapshot error:', err)
+    );
+
+    const unsubBudgets = onSnapshot(
+      query(collection(db, 'budgets'), where('user_id', '==', uid)),
+      (snapshot) => {
+        const list: Budget[] = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        setAllBudgets(list);
+      },
+      (err) => console.error('Budgets onSnapshot error:', err)
+    );
+
+    const unsubSavings = onSnapshot(
+      query(collection(db, 'savings'), where('user_id', '==', uid)),
+      (snapshot) => {
+        const list: SavingsTransaction[] = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        list.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created_at || '').localeCompare(a.created_at || ''));
+        setSavings(list);
+      },
+      (err) => console.error('Savings onSnapshot error:', err)
+    );
+
+    const unsubRecurring = onSnapshot(
+      query(collection(db, 'recurring_expenses'), where('user_id', '==', uid)),
+      (snapshot) => {
+        const list: RecurringTransaction[] = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...(data as any),
+            dayOfMonth: (data as any).day_of_month || (data as any).dayOfMonth,
+          };
+        });
+        setRecurring(list);
+        localStorage.setItem('ledger_recurring', JSON.stringify(list));
+      },
+      (err) => console.error('Recurring onSnapshot error:', err)
+    );
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubExpenses();
+      unsubBudgets();
+      unsubSavings();
+      unsubRecurring();
     };
-  }, [isOfflineMode, session, fetchData]);
+  }, [isOfflineMode, session]);
 
   // Compute active budget configuration and active date range
   const activeBudgetAndRange = useMemo(() => {
@@ -853,11 +854,7 @@ function App() {
           );
           showToast('Transaction updated.');
         } else {
-          const { error } = await supabase
-            .from('expenses')
-            .update(expenseData)
-            .eq('id', editingExpense.id);
-          if (error) throw error;
+          await setDoc(doc(db, 'expenses', editingExpense.id), expenseData, { merge: true });
           showToast('Transaction updated.');
           fetchData();
         }
@@ -878,8 +875,12 @@ function App() {
           );
           showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
         } else {
-          const { error } = await supabase.from('expenses').insert([expenseData]);
-          if (error) throw error;
+          const newDoc = doc(collection(db, 'expenses'));
+          await setDoc(newDoc, {
+            ...expenseData,
+            id: newDoc.id,
+            created_at: new Date().toISOString(),
+          });
           showToast(data.type === 'credit' ? 'Income credit logged.' : 'Expense logged successfully.');
           fetchData();
         }
@@ -941,19 +942,18 @@ function App() {
           type: item.type
         }));
 
-        const { error } = await supabase.from('expenses').insert(formattedNew);
-        if (error) throw error;
+        const batch = writeBatch(db);
+        formattedNew.forEach((item) => {
+          const newDoc = doc(collection(db, 'expenses'));
+          batch.set(newDoc, {
+            ...item,
+            id: newDoc.id,
+            created_at: new Date().toISOString(),
+          });
+        });
+        await batch.commit();
 
-        // Fetch fresh copy to keep UI synchronized
-        const { data: updatedExpenses } = await supabase
-          .from('expenses')
-          .select('*')
-          .order('date', { ascending: false })
-          .order('created_at', { ascending: false });
-
-        if (updatedExpenses) {
-          setExpenses(updatedExpenses);
-        }
+        await fetchData();
         showToast(`Successfully imported ${newItems.length} transactions.`);
       }
     } catch (err) {
@@ -980,7 +980,7 @@ function App() {
         );
         showToast('Transaction restored.');
       } else {
-        const { error } = await supabase.from('expenses').insert([{
+        await setDoc(doc(db, 'expenses', backup.id), {
           id: backup.id,
           user_id: backup.user_id,
           amount: backup.amount,
@@ -988,8 +988,8 @@ function App() {
           note: backup.note,
           date: backup.date,
           type: backup.type,
-        }]);
-        if (error) throw error;
+          created_at: backup.created_at || new Date().toISOString(),
+        });
         setExpenses(updated);
         showToast('Transaction restored.');
       }
@@ -1039,8 +1039,7 @@ function App() {
         );
         showToast('Transaction deleted', 'Undo', handleUndoDelete);
       } else {
-        const { error } = await supabase.from('expenses').delete().eq('id', id);
-        if (error) throw error;
+        await deleteDoc(doc(db, 'expenses', id));
         showToast('Transaction deleted', 'Undo', handleUndoDelete);
       }
     } catch (err) {
@@ -1063,8 +1062,7 @@ function App() {
         );
         showToast('Budget period deleted.');
       } else {
-        const { error } = await supabase.from('budgets').delete().eq('id', id);
-        if (error) throw error;
+        await deleteDoc(doc(db, 'budgets', id));
         showToast('Budget period deleted.');
       }
     } catch (err) {
@@ -1155,17 +1153,17 @@ function App() {
           localStorage.setItem('ledger_expenses', JSON.stringify(updated));
           showToast(`Auto-logged ${newTransactions.length} recurring transaction(s).`);
         } else {
-          const { error } = await supabase.from('expenses').insert(newTransactions);
-          if (error) throw error;
-          
-          const { data: updatedExpenses } = await supabase
-            .from('expenses')
-            .select('*')
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false });
-          if (updatedExpenses) {
-            setExpenses(updatedExpenses);
-          }
+          const batch = writeBatch(db);
+          newTransactions.forEach((tx) => {
+            const newDoc = doc(collection(db, 'expenses'));
+            batch.set(newDoc, {
+              ...tx,
+              id: newDoc.id,
+              created_at: new Date().toISOString(),
+            });
+          });
+          await batch.commit();
+          await fetchData();
           showToast(`Auto-logged ${newTransactions.length} recurring transaction(s).`);
         }
       } catch (err) {
@@ -1207,27 +1205,13 @@ function App() {
         localStorage.setItem('ledger_recurring', JSON.stringify(updated));
         showToast('Recurring auto-bill configured.');
       } else {
-        const { error } = await supabase.from('recurring_expenses').insert([newRule]);
-        if (error) {
-          console.warn('Failed to insert rule into Supabase, saving locally:', error);
-          const updated = [...recurring, {
-            ...newRule,
-            dayOfMonth: data.dayOfMonth,
-            id: `local-rec-rule-${Date.now()}`,
-            created_at: new Date().toISOString(),
-          } as RecurringTransaction];
-          setRecurring(updated);
-          localStorage.setItem('ledger_recurring', JSON.stringify(updated));
-        } else {
-          const { data: recData } = await supabase.from('recurring_expenses').select('*');
-          if (recData) {
-            const mapped = recData.map((r: any) => ({
-              ...r,
-              dayOfMonth: r.day_of_month
-            }));
-            setRecurring(mapped);
-          }
-        }
+        const newDoc = doc(collection(db, 'recurring_expenses'));
+        await setDoc(newDoc, {
+          ...newRule,
+          id: newDoc.id,
+          created_at: new Date().toISOString(),
+        });
+        await fetchData();
         showToast('Recurring auto-bill configured.');
       }
     } catch (err) {
@@ -1246,11 +1230,7 @@ function App() {
         localStorage.setItem('ledger_recurring', JSON.stringify(updated));
         showToast('Auto-bill configuration removed.');
       } else {
-        const { error } = await supabase.from('recurring_expenses').delete().eq('id', id);
-        if (error) {
-          console.warn('Failed to delete from Supabase, fallback locally:', error);
-          localStorage.setItem('ledger_recurring', JSON.stringify(updated));
-        }
+        await deleteDoc(doc(db, 'recurring_expenses', id));
         showToast('Auto-bill configuration removed.');
       }
     } catch (err) {
@@ -1339,7 +1319,7 @@ function App() {
           localStorage.setItem(storageKey, JSON.stringify(remaining));
           setAllBudgets(remaining);
         } else {
-          await supabase.from('budgets').delete().in('id', budgetsToDelete);
+          await Promise.all(budgetsToDelete.map((bId) => deleteDoc(doc(db, 'budgets', bId))));
         }
       } catch (err) {
         console.error('Failed to pre-delete empty overlapping budgets:', err);
@@ -1403,26 +1383,21 @@ function App() {
         showToast(isUpdating ? 'Budget updated successfully.' : 'Budget configured successfully.');
       } else {
         if (isUpdating && editingBudget.id) {
-          // Update in-place in Supabase
-          const { error } = await supabase
-            .from('budgets')
-            .update(newBudget)
-            .eq('id', editingBudget.id);
-          if (error) throw error;
+          await setDoc(doc(db, 'budgets', editingBudget.id), newBudget, { merge: true });
         } else {
-          // Only delete the older monthly budget if it is for the SAME month
           if (data.type === 'monthly') {
-            const { error } = await supabase
-              .from('budgets')
-              .delete()
-              .eq('user_id', session.user.id)
-              .eq('type', 'monthly')
-              .eq('month', currentMonthStr);
-            if (error) throw error;
+            const sameMonth = allBudgets.filter(
+              (b) => b.type === 'monthly' && b.month === currentMonthStr && b.id
+            );
+            await Promise.all(sameMonth.map((b) => deleteDoc(doc(db, 'budgets', b.id!))));
           }
 
-          const { error } = await supabase.from('budgets').insert([newBudget]);
-          if (error) throw error;
+          const newDoc = doc(collection(db, 'budgets'));
+          await setDoc(newDoc, {
+            ...newBudget,
+            id: newDoc.id,
+            created_at: new Date().toISOString(),
+          });
         }
         
         await fetchData();
@@ -1474,8 +1449,12 @@ function App() {
         localStorage.setItem('ledger_savings', JSON.stringify(updated));
         showToast(data.type === 'incoming' ? 'Savings deposit logged.' : 'Savings withdrawal logged.');
       } else {
-        const { error } = await supabase.from('savings').insert([newSavings]);
-        if (error) throw error;
+        const newDoc = doc(collection(db, 'savings'));
+        await setDoc(newDoc, {
+          ...newSavings,
+          id: newDoc.id,
+          created_at: new Date().toISOString(),
+        });
         showToast(data.type === 'incoming' ? 'Savings deposit logged.' : 'Savings withdrawal logged.');
         fetchData();
       }
@@ -1495,8 +1474,7 @@ function App() {
         localStorage.setItem('ledger_savings', JSON.stringify(filtered));
         showToast('Savings entry deleted.');
       } else {
-        const { error } = await supabase.from('savings').delete().eq('id', id);
-        if (error) throw error;
+        await deleteDoc(doc(db, 'savings', id));
         showToast('Savings entry deleted.');
       }
     } catch (err) {
@@ -1511,7 +1489,7 @@ function App() {
     if (isOfflineMode) {
       setSession(null);
     } else {
-      await supabase.auth.signOut();
+      await signOut(auth);
     }
   };
 

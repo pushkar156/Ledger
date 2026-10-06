@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 *.backup
 db_cluster-*.backup
+migration-data.json

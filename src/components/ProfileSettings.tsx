@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 import { User, Mail, Lock, CheckCircle, AlertCircle, Camera, Smartphone, LogOut, Eye, EyeOff } from 'lucide-react';
 import { ThemeToggle } from './ui/ThemeToggle';
 
@@ -14,7 +15,6 @@ interface ProfileSettingsProps {
   onInstallApp: () => Promise<void>;
 }
 
-// 4 Pre-seeded premium avatar emoji presets for instant visual selection
 const AVATAR_OPTIONS = ['📊', '💼', '🧘', '💸', '🍀', '☕'];
 
 export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
@@ -49,9 +49,9 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   // Load user data on mount
   useEffect(() => {
     if (session?.user) {
-      const meta = session.user.user_metadata || {};
-      setFullName(meta.full_name || localStorage.getItem('ledger_user_fullname') || 'Ledger User');
-      setAvatarEmoji(meta.avatar_emoji || localStorage.getItem('ledger_user_avatar') || '📊');
+      const user = session.user;
+      setFullName(user.displayName || localStorage.getItem('ledger_user_fullname') || 'Ledger User');
+      setAvatarEmoji(user.photoURL || localStorage.getItem('ledger_user_avatar') || '📊');
     }
   }, [session]);
 
@@ -67,26 +67,18 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
     setSavingProfile(true);
     try {
-      if (isOfflineMode) {
-        localStorage.setItem('ledger_user_fullname', fullName);
-        localStorage.setItem('ledger_user_avatar', avatarEmoji);
-        
-        // Mock profile update delay
-        await new Promise((r) => setTimeout(r, 600));
-        setProfileSuccess(true);
-        showToast('Profile updated successfully.');
-      } else {
-        const { error } = await supabase.auth.updateUser({
-          data: {
-            full_name: fullName,
-            avatar_emoji: avatarEmoji,
-          },
+      localStorage.setItem('ledger_user_fullname', fullName);
+      localStorage.setItem('ledger_user_avatar', avatarEmoji);
+
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: fullName.trim(),
+          photoURL: avatarEmoji,
         });
-        if (error) throw error;
-        
-        setProfileSuccess(true);
-        showToast('Profile updated successfully.');
       }
+
+      setProfileSuccess(true);
+      showToast('Profile updated successfully.');
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err: any) {
       console.error(err);
@@ -101,8 +93,8 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     setValidationError(null);
     setPasswordSuccess(false);
 
-    if (isOfflineMode) {
-      setValidationError('Password changes are not available in offline sandbox mode.');
+    if (isOfflineMode || !auth.currentUser) {
+      setValidationError('Password changes require an active authenticated account.');
       return;
     }
 
@@ -128,21 +120,17 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     setShowConfirmModal(false);
     setSavingPassword(true);
     try {
-      // 1. Verify old password first by attempting a re-login check
-      const { error: verifyError } = await supabase.auth.signInWithPassword({
-        email: session.user.email,
-        password: oldPassword,
-      });
-
-      if (verifyError) {
-        throw new Error('Current password verification failed. Please try again.');
+      const user = auth.currentUser;
+      if (!user || !user.email) {
+        throw new Error('No active authenticated user.');
       }
 
+      // 1. Re-authenticate with old password
+      const credential = EmailAuthProvider.credential(user.email, oldPassword);
+      await reauthenticateWithCredential(user, credential);
+
       // 2. Update to new password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (updateError) throw updateError;
+      await updatePassword(user, newPassword);
 
       setPasswordSuccess(true);
       setOldPassword('');
@@ -152,7 +140,11 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err: any) {
       console.error(err);
-      setValidationError(err.message || 'Failed to update password.');
+      let msg = err.message || 'Failed to update password.';
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        msg = 'Current password is incorrect. Please try again.';
+      }
+      setValidationError(msg);
     } finally {
       setSavingPassword(false);
     }
@@ -241,7 +233,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
               <input
                 type="email"
                 disabled
-                value={session?.user?.email || 'offline@sandbox.local'}
+                value={session?.user?.email || 'guest@ledger.app'}
                 className="w-full bg-ledgerElevated/50 border border-ledgerBorder/40 text-ledgerText/50 rounded-lg py-2.5 pl-10 pr-4 font-sans text-xs cursor-not-allowed"
               />
             </div>
@@ -265,7 +257,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       </div>
 
       {/* Password Reset Card */}
-      {session && !isOfflineMode && (
+      {session && !isOfflineMode && session.user?.email && (
         <div className="bg-ledgerSurface border border-ledgerBorder rounded-xl p-5 shadow-lg flex flex-col space-y-4">
           <h3 className="text-xs font-semibold text-ledgerMuted uppercase tracking-wider">
             Change Password
