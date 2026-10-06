@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   sendPasswordResetEmail,
   signInWithPopup,
+  signInWithCredential,
+  GoogleAuthProvider,
   updateProfile 
 } from 'firebase/auth';
 import { auth, googleProvider, hasFirebaseCreds } from '../lib/firebase';
@@ -92,25 +95,46 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess, hideHeader = false })
     setGoogleLoading(true);
     setError(null);
 
-    if (Capacitor.isNativePlatform()) {
-      setError('Google Sign-In is only supported in web browsers. On the Android mobile app, please log in with your Email and Password below.');
-      setGoogleLoading(false);
-      return;
-    }
-
     try {
-      const res = await signInWithPopup(auth, googleProvider);
-      if (res.user) {
-        if (res.user.displayName) {
-          localStorage.setItem('ledger_user_fullname', res.user.displayName);
+      if (Capacitor.isNativePlatform()) {
+        // Native Android Google Sign-In with Credential Manager + Play Services fallback
+        let result;
+        try {
+          result = await FirebaseAuthentication.signInWithGoogle();
+        } catch (credErr: any) {
+          console.warn('Credential Manager failed, falling back to Google Play Services:', credErr);
+          result = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
         }
-        onAuthSuccess();
+
+        if (result?.credential?.idToken) {
+          const credential = GoogleAuthProvider.credential(result.credential.idToken);
+          const res = await signInWithCredential(auth, credential);
+          if (res.user) {
+            if (res.user.displayName) {
+              localStorage.setItem('ledger_user_fullname', res.user.displayName);
+            }
+            onAuthSuccess();
+          }
+        } else if (result?.user) {
+          if (result.user.displayName) {
+            localStorage.setItem('ledger_user_fullname', result.user.displayName);
+          }
+          onAuthSuccess();
+        }
+      } else {
+        // Web Browser Popup Sign-In
+        const res = await signInWithPopup(auth, googleProvider);
+        if (res.user) {
+          if (res.user.displayName) {
+            localStorage.setItem('ledger_user_fullname', res.user.displayName);
+          }
+          onAuthSuccess();
+        }
       }
     } catch (err: any) {
-      if (err.code === 'auth/operation-not-supported-in-this-environment' || err.message?.includes('disallowed_useragent') || err.code === 'auth/popup-blocked') {
-        setError('Google popups are blocked inside the mobile view. Please sign in using your Email & Password below.');
-      } else if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-        setError(err.message || 'Google sign-in failed.');
+      console.error('Google sign-in error:', err);
+      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+        setError(err.message || 'Google sign-in failed. Please try again.');
       }
     } finally {
       setGoogleLoading(false);
@@ -151,11 +175,6 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess, hideHeader = false })
               </svg>
             )}
             <span>Continue with Google</span>
-            {Capacitor.isNativePlatform() && (
-              <span className="text-[10px] bg-ledgerSurface border border-ledgerBorder px-1.5 py-0.5 rounded text-ledgerMuted ml-1">
-                Web only
-              </span>
-            )}
           </button>
 
           <div className="relative flex items-center justify-center my-3">

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "587599270134",
+    "project_id": "ledger-daily-expenses",
+    "storage_bucket": "ledger-daily-expenses.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587599270134:android:aa49e34499ec180ecb5cd7",
+        "android_client_info": {
+          "package_name": "com.pushkar.ledger"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "587599270134-qerjt92ilnh4m6s7b2pgb7cssps3vm4h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pushkar.ledger",
+            "certificate_hash": "22dc5445da3223a84537b6845d9274837dd2f16c"
+          }
+        },
+        {
+          "client_id": "587599270134-r0e2g3d62e3ff8rp87sr22jqr8c6k2l0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCf1dEMPODgd9PrHrOMg5Eqo1hanQipqoc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "587599270134-r0e2g3d62e3ff8rp87sr22jqr8c6k2l0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
