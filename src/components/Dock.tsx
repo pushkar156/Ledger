@@ -6,7 +6,7 @@ import {
   useTransform,
   type SpringOptions,
   AnimatePresence
-} from 'motion/react';
+} from 'framer-motion';
 import React, { Children, cloneElement, useEffect, useMemo, useRef, useState } from 'react';
 
 export type DockItemData = {
@@ -53,7 +53,7 @@ function DockItem({
   const ref = useRef<HTMLDivElement>(null);
   const isHovered = useMotionValue(0);
 
-  const mouseDistance = useTransform(mouseX, val => {
+  const mouseDistance = useTransform(mouseX, (val: number) => {
     const rect = ref.current?.getBoundingClientRect() ?? {
       x: 0,
       width: baseItemSize
@@ -110,7 +110,7 @@ function DockLabel({ children, className = '', isHovered }: DockLabelProps) {
 
   useEffect(() => {
     if (!isHovered) return;
-    const unsubscribe = isHovered.on('change', latest => {
+    const unsubscribe = isHovered.on('change', (latest: number) => {
       setIsVisible(latest === 1);
     });
     return () => unsubscribe();
@@ -165,7 +165,7 @@ export default function Dock({
   return (
     <motion.div style={{ height, scrollbarWidth: 'none' }} className="mx-2 flex max-w-full items-center">
       <motion.div
-        onMouseMove={({ pageX }) => {
+        onMouseMove={({ pageX }: React.MouseEvent) => {
           isHovered.set(1);
           mouseX.set(pageX);
         }}

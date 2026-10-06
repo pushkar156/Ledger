@@ -287,7 +287,7 @@ function App() {
   };
   
   // Tab states
-  const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'calendar' | 'recurring' | 'settings'>(() => {
+  const [activeTab, setActiveTab] = useState<'expenses' | 'savings' | 'logs' | 'recurring' | 'settings'>(() => {
     const savedTab = localStorage.getItem('ledger_active_tab');
     return (savedTab as any) || 'expenses';
   });
@@ -313,6 +313,49 @@ function App() {
 
   // Helper check for offline database mode
   const isOfflineMode = !hasFirebaseCreds;
+
+  // Toast System trigger helper
+  const showToast = useCallback((message: string, actionLabel?: string, onAction?: () => void) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setToast({ message, actionLabel, onAction });
+    
+    // Auto dismiss after 5 seconds
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+    }, 5000);
+  }, []);
+
+  // Migrate local guest caches to Firebase cloud storage on login
+  const migrateLocalGuestData = useCallback(async (userId: string, guestExpenses: Expense[]) => {
+    if (guestExpenses.length === 0) return;
+    try {
+      console.log('Migrating local guest expenses to Firebase for user:', userId);
+      const batch = writeBatch(db);
+      guestExpenses.forEach((e) => {
+        const newDoc = doc(collection(db, 'expenses'));
+        batch.set(newDoc, {
+          id: newDoc.id,
+          user_id: userId,
+          amount: Number(e.amount),
+          category: e.category,
+          note: e.note || null,
+          date: e.date,
+          type: e.type || 'debit',
+          created_at: e.created_at || new Date().toISOString(),
+        });
+      });
+
+      await batch.commit();
+
+      // Clear guest storage on success
+      localStorage.removeItem('ledger_expenses_local_guest');
+      showToast(`Successfully synced ${guestExpenses.length} local expenses to your cloud profile!`);
+    } catch (err) {
+      console.error('Failed migrating local guest data:', err);
+    }
+  }, [showToast]);
 
   // Initialize Auth & Offline Storage Seeding
   useEffect(() => {
@@ -377,37 +420,8 @@ function App() {
         unsubscribe();
       };
     }
-  }, [isOfflineMode]);
+  }, [isOfflineMode, migrateLocalGuestData]);
 
-  // Migrate local guest caches to Firebase cloud storage on login
-  const migrateLocalGuestData = async (userId: string, guestExpenses: Expense[]) => {
-    if (guestExpenses.length === 0) return;
-    try {
-      console.log('Migrating local guest expenses to Firebase for user:', userId);
-      const batch = writeBatch(db);
-      guestExpenses.forEach((e) => {
-        const newDoc = doc(collection(db, 'expenses'));
-        batch.set(newDoc, {
-          id: newDoc.id,
-          user_id: userId,
-          amount: Number(e.amount),
-          category: e.category,
-          note: e.note || null,
-          date: e.date,
-          type: e.type || 'debit',
-          created_at: e.created_at || new Date().toISOString(),
-        });
-      });
-
-      await batch.commit();
-
-      // Clear guest storage on success
-      localStorage.removeItem('ledger_expenses_local_guest');
-      showToast(`Successfully synced ${guestExpenses.length} local expenses to your cloud profile!`);
-    } catch (err) {
-      console.error('Failed migrating local guest data:', err);
-    }
-  };
 
   // Clean up duplicate or overlapping budget configurations that have 0 transactions
   const cleanupDuplicateBudgets = useCallback(async (budgetsList: Budget[], expensesList: Expense[]) => {
@@ -814,18 +828,6 @@ function App() {
     );
   }, [expenses, activeRange]);
 
-  // Toast System trigger helper
-  const showToast = useCallback((message: string, actionLabel?: string, onAction?: () => void) => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    setToast({ message, actionLabel, onAction });
-    
-    // Auto dismiss after 5 seconds
-    toastTimeoutRef.current = window.setTimeout(() => {
-      setToast(null);
-    }, 5000);
-  }, []);
 
   // Add or Edit Expense/Credit Callback
   const handleSaveExpense = async (data: { amount: number; category: string; note: string; date: string; type: 'debit' | 'credit' }) => {
@@ -1163,7 +1165,6 @@ function App() {
             });
           });
           await batch.commit();
-          await fetchData();
           showToast(`Auto-logged ${newTransactions.length} recurring transaction(s).`);
         }
       } catch (err) {
