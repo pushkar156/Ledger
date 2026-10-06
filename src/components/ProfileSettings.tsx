@@ -175,15 +175,43 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           {/* Avatar Selector Section */}
           <div className="flex flex-col items-center justify-center space-y-2.5 pb-2">
             <div className="relative">
-              <div className="w-16 h-16 rounded-full bg-ledgerElevated border border-ledgerBorder flex items-center justify-center text-3xl shadow-md select-none">
-                {avatarEmoji}
+              <div className="w-16 h-16 rounded-full bg-ledgerElevated border border-ledgerBorder flex items-center justify-center text-3xl shadow-md select-none overflow-hidden">
+                {avatarEmoji && (avatarEmoji.startsWith('http://') || avatarEmoji.startsWith('https://')) ? (
+                  <img
+                    src={avatarEmoji}
+                    alt="Profile Avatar"
+                    className="w-full h-full object-cover rounded-full"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span>{avatarEmoji || '📊'}</span>
+                )}
               </div>
               <div className="absolute bottom-0 right-0 p-1 bg-ledgerMint text-[#0F1B1E] rounded-full border border-ledgerSurface cursor-pointer">
                 <Camera className="w-3 h-3" />
               </div>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {session?.user?.photoURL && (session.user.photoURL.startsWith('http://') || session.user.photoURL.startsWith('https://')) && (
+                <button
+                  type="button"
+                  onClick={() => setAvatarEmoji(session.user.photoURL)}
+                  className={`w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center transition border ${
+                    avatarEmoji === session.user.photoURL
+                      ? 'border-ledgerMint ring-1 ring-ledgerMint bg-ledgerMint/5'
+                      : 'border-ledgerBorder/40 hover:border-ledgerMuted bg-transparent'
+                  }`}
+                  title="Google Account Photo"
+                >
+                  <img
+                    src={session.user.photoURL}
+                    alt="Google Profile"
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </button>
+              )}
               {AVATAR_OPTIONS.map((emoji) => (
                 <button
                   type="button"
@@ -191,7 +219,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                   onClick={() => setAvatarEmoji(emoji)}
                   className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg transition border ${
                     avatarEmoji === emoji
-                      ? 'border-ledgerMint bg-ledgerMint/5'
+                      ? 'border-ledgerMint bg-ledgerMint/5 ring-1 ring-ledgerMint'
                       : 'border-ledgerBorder/40 hover:border-ledgerMuted bg-transparent'
                   }`}
                 >
